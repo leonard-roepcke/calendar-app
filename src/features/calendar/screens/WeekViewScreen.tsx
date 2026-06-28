@@ -2,14 +2,14 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
-import { colors } from '../../../shared/theme/colors';
-import { addDays, dateFromDayMinutes } from '../../../shared/utils/dateTime';
+import { blockColorOptions, colors } from '../../../shared/theme/colors';
+import { dateFromDayMinutes } from '../../../shared/utils/dateTime';
 import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
@@ -34,6 +34,8 @@ export function WeekViewScreen() {
     updateBlock,
     removeBlock,
     moveBlock,
+    resizeBlockStart,
+    resizeBlockEnd,
     clearError,
   } = useCalendar();
 
@@ -44,28 +46,39 @@ export function WeekViewScreen() {
     null,
   );
 
-  const openCreateForm = (dayIndex?: number, startMinutes?: number) => {
-    setEditingBlock(null);
-    setFormDay(weekDays[dayIndex ?? 0] ?? selectedWeekStart);
-    setPrefilledStartMinutes(startMinutes ?? null);
-    setIsFormVisible(true);
-  };
-
-  const openEditForm = (blockId: string) => {
-    const block = blocks.find((item) => item.id === blockId);
-    if (!block) {
-      return;
-    }
+  const openEditForm = (block: TimeBlock) => {
     setEditingBlock(block);
     setFormDay(block.startAt);
     setPrefilledStartMinutes(null);
     setIsFormVisible(true);
   };
 
+  const openEditFormById = (blockId: string) => {
+    const block = blocks.find((item) => item.id === blockId);
+    if (block) {
+      openEditForm(block);
+    }
+  };
+
   const closeForm = () => {
     setIsFormVisible(false);
     setEditingBlock(null);
     setPrefilledStartMinutes(null);
+  };
+
+  const handleSlotCreate = async (
+    dayIndex: number,
+    startMinutes: number,
+    endMinutes: number,
+  ) => {
+    const day = weekDays[dayIndex] ?? selectedWeekStart;
+    const block = await createBlock({
+      title: 'Neuer Termin',
+      startAt: dateFromDayMinutes(day, startMinutes),
+      endAt: dateFromDayMinutes(day, endMinutes),
+      color: blockColorOptions[0],
+    });
+    openEditForm(block);
   };
 
   const handleSubmit = async (values: TimeBlockFormValues) => {
@@ -83,14 +96,6 @@ export function WeekViewScreen() {
       });
       return;
     }
-
-    await createBlock({
-      title: values.title,
-      startAt,
-      endAt,
-      color: values.color,
-      notes: values.notes || undefined,
-    });
   };
 
   const handleDelete = async () => {
@@ -102,7 +107,7 @@ export function WeekViewScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <WeekHeader
         weekStart={selectedWeekStart}
         onPrevious={goToPreviousWeek}
@@ -124,17 +129,21 @@ export function WeekViewScreen() {
       ) : (
         <WeekTimeline
           config={config}
-          onSlotPress={(dayIndex, minutes) => openCreateForm(dayIndex, minutes)}
-          onBlockPress={openEditForm}
+          onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
+            void handleSlotCreate(dayIndex, startMinutes, endMinutes);
+          }}
+          onBlockPress={openEditFormById}
           onBlockMove={(blockId, deltaDays, deltaMinutes) => {
             void moveBlock(blockId, deltaDays, deltaMinutes);
           }}
+          onBlockResizeStart={(blockId, deltaDays, deltaMinutes) => {
+            void resizeBlockStart(blockId, deltaDays, deltaMinutes);
+          }}
+          onBlockResizeEnd={(blockId, deltaDays, deltaMinutes) => {
+            void resizeBlockEnd(blockId, deltaDays, deltaMinutes);
+          }}
         />
       )}
-
-      <Pressable style={styles.fab} onPress={() => openCreateForm()}>
-        <Text style={styles.fabLabel}>+</Text>
-      </Pressable>
 
       <TimeBlockFormModal
         visible={isFormVisible}
@@ -167,23 +176,5 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: 13,
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    elevation: 4,
-  },
-  fabLabel: {
-    color: colors.textInverse,
-    fontSize: 28,
-    lineHeight: 30,
-    fontWeight: '500',
   },
 });

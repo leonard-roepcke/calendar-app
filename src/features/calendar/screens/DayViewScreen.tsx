@@ -2,11 +2,11 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { colors } from '../../../shared/theme/colors';
 import { addDays, dateFromDayMinutes, startOfDay } from '../../../shared/utils/dateTime';
@@ -94,7 +94,7 @@ export function DayViewScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <DayHeader
         selectedDay={selectedDay}
         onPrevious={() => setSelectedDay((day) => addDays(day, -1))}

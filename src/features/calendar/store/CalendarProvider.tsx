@@ -17,7 +17,7 @@ import type {
   TimeBlockId,
   UpdateTimeBlockInput,
 } from '../../../domain/models/timeBlock';
-import { computeBlockMove } from '../../../shared/utils/layout';
+import { computeBlockMove, computeBlockResizeEnd, computeBlockResizeStart } from '../../../shared/utils/layout';
 import {
   addDays,
   getWeekDays,
@@ -82,10 +82,20 @@ interface CalendarContextValue {
   goToNextWeek: () => void;
   goToToday: () => void;
   refreshWeek: () => Promise<void>;
-  createBlock: (input: CreateTimeBlockInput) => Promise<void>;
+  createBlock: (input: CreateTimeBlockInput) => Promise<TimeBlock>;
   updateBlock: (input: UpdateTimeBlockInput) => Promise<void>;
   removeBlock: (id: TimeBlockId) => Promise<void>;
   moveBlock: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => Promise<void>;
+  resizeBlockStart: (
+    id: TimeBlockId,
+    deltaDays: number,
+    deltaMinutes: number,
+  ) => Promise<void>;
+  resizeBlockEnd: (
+    id: TimeBlockId,
+    deltaDays: number,
+    deltaMinutes: number,
+  ) => Promise<void>;
   clearError: () => void;
 }
 
@@ -146,13 +156,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const createBlock = useCallback(
-    async (input: CreateTimeBlockInput) => {
+    async (input: CreateTimeBlockInput): Promise<TimeBlock> => {
       try {
         const block = await timeBlockService.create(input);
         if (isDateInWeek(block.startAt, state.selectedWeekStart)) {
           dispatch({ type: 'ADD_BLOCK', block });
         }
         dispatch({ type: 'SET_ERROR', error: null });
+        return block;
       } catch (error) {
         dispatch({
           type: 'SET_ERROR',
@@ -217,6 +228,60 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     [state.blocks, state.selectedWeekStart, updateBlock],
   );
 
+  const resizeBlockStart = useCallback(
+    async (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => {
+      const block = state.blocks.find((item) => item.id === id);
+      if (!block) {
+        return;
+      }
+
+      const times = computeBlockResizeStart(
+        block,
+        state.selectedWeekStart,
+        deltaDays,
+        deltaMinutes,
+        DEFAULT_CALENDAR_CONFIG,
+      );
+      if (!times) {
+        return;
+      }
+
+      await updateBlock({
+        id,
+        startAt: times.startAt,
+        endAt: times.endAt,
+      });
+    },
+    [state.blocks, state.selectedWeekStart, updateBlock],
+  );
+
+  const resizeBlockEnd = useCallback(
+    async (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => {
+      const block = state.blocks.find((item) => item.id === id);
+      if (!block) {
+        return;
+      }
+
+      const times = computeBlockResizeEnd(
+        block,
+        state.selectedWeekStart,
+        deltaDays,
+        deltaMinutes,
+        DEFAULT_CALENDAR_CONFIG,
+      );
+      if (!times) {
+        return;
+      }
+
+      await updateBlock({
+        id,
+        startAt: times.startAt,
+        endAt: times.endAt,
+      });
+    },
+    [state.blocks, state.selectedWeekStart, updateBlock],
+  );
+
   const clearError = useCallback(() => {
     dispatch({ type: 'SET_ERROR', error: null });
   }, []);
@@ -237,6 +302,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       updateBlock,
       removeBlock,
       moveBlock,
+      resizeBlockStart,
+      resizeBlockEnd,
       clearError,
     }),
     [
@@ -253,6 +320,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       updateBlock,
       removeBlock,
       moveBlock,
+      resizeBlockStart,
+      resizeBlockEnd,
       clearError,
     ],
   );

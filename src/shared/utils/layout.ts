@@ -153,6 +153,94 @@ export function computeBlockMove(
   return { startAt, endAt };
 }
 
+export function panTranslationToDeltas(
+  translationX: number,
+  translationY: number,
+  columnWidth: number,
+  config: CalendarConfig,
+): { deltaDays: number; deltaMinutes: number } {
+  const deltaDays = columnWidth > 0 ? Math.round(translationX / columnWidth) : 0;
+  const metrics = getTimelineMetrics(config);
+  const rawMinutes = translationY * metrics.minutesPerPixel;
+  const deltaMinutes =
+    Math.round(rawMinutes / config.snapMinutes) * config.snapMinutes;
+  return { deltaDays, deltaMinutes };
+}
+
+export function computeBlockResizeStart(
+  block: TimeBlock,
+  weekStart: Date,
+  deltaDays: number,
+  deltaMinutes: number,
+  config: CalendarConfig,
+): { startAt: Date; endAt: Date } | null {
+  const endMinutes = minutesSinceStartOfDay(block.endAt);
+  const currentDayIndex = daysBetween(weekStart, block.startAt);
+  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
+  const newStartMinutes = clampMinutes(
+    minutesSinceStartOfDay(block.startAt) + deltaMinutes,
+    config.dayStartHour * 60,
+    endMinutes - config.snapMinutes,
+  );
+
+  const newDay = addDays(startOfDay(block.startAt), newDayIndex - currentDayIndex);
+  const startAt = dateFromDayMinutes(newDay, newStartMinutes);
+  const endAt = new Date(block.endAt);
+
+  if (validateTimeRange(startAt, endAt)) {
+    return null;
+  }
+
+  return { startAt, endAt };
+}
+
+export function computeBlockResizeEnd(
+  block: TimeBlock,
+  weekStart: Date,
+  deltaDays: number,
+  deltaMinutes: number,
+  config: CalendarConfig,
+): { startAt: Date; endAt: Date } | null {
+  const startMinutes = minutesSinceStartOfDay(block.startAt);
+  const currentDayIndex = daysBetween(weekStart, block.endAt);
+  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
+  const newEndMinutes = clampMinutes(
+    minutesSinceStartOfDay(block.endAt) + deltaMinutes,
+    startMinutes + config.snapMinutes,
+    config.dayEndHour * 60,
+  );
+
+  const newDay = addDays(startOfDay(block.endAt), newDayIndex - currentDayIndex);
+  const startAt = new Date(block.startAt);
+  const endAt = dateFromDayMinutes(newDay, newEndMinutes);
+
+  if (validateTimeRange(startAt, endAt)) {
+    return null;
+  }
+
+  return { startAt, endAt };
+}
+
+export function normalizeCreationRange(
+  startMinutes: number,
+  endMinutes: number,
+  config: CalendarConfig,
+): { startMinutes: number; endMinutes: number } {
+  const minStart = config.dayStartHour * 60;
+  const maxEnd = config.dayEndHour * 60;
+  const start = clampMinutes(
+    snapMinutesToInterval(Math.min(startMinutes, endMinutes), config.snapMinutes),
+    minStart,
+    maxEnd - config.snapMinutes,
+  );
+  const end = clampMinutes(
+    snapMinutesToInterval(Math.max(startMinutes, endMinutes), config.snapMinutes),
+    start + config.snapMinutes,
+    maxEnd,
+  );
+  return { startMinutes: start, endMinutes: end };
+}
+
 export function validateTimeRange(startAt: Date, endAt: Date): string | null {
   if (endAt <= startAt) {
     return 'Endzeit muss nach der Startzeit liegen.';
