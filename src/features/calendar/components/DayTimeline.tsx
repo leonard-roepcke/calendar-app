@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
 import { colors } from '../../../shared/theme/colors';
-import { getTimelineMetrics, yToMinutes } from '../../../shared/utils/layout';
+import { getTimelineMetrics, TIMELINE_HORIZONTAL_PADDING, TIMELINE_SCROLL_BOTTOM_PADDING, yToMinutes } from '../../../shared/utils/layout';
 import { useDayTimeline } from '../hooks/useDayTimeline';
 import { HourGrid, TimeColumn } from './HourGrid';
 import { TimeBlockLayer } from './TimeBlockCard';
@@ -42,7 +42,7 @@ export function DayTimeline({
   return (
     <ScrollView
       style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: 96 }}
+      contentContainerStyle={{ paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING + 48 }}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.row}>
@@ -73,7 +73,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
+    paddingHorizontal: TIMELINE_HORIZONTAL_PADDING,
     paddingTop: 8,
   },
   timelineArea: {

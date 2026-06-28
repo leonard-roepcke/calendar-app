@@ -109,8 +109,6 @@ export function WeekViewScreen() {
       <WeekToolbar
         weekDays={weekDays}
         weekStart={selectedWeekStart}
-        onPrevious={goToPreviousWeek}
-        onNext={goToNextWeek}
         onToday={goToToday}
       />
 

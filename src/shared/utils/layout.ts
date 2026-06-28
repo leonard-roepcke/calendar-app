@@ -11,6 +11,10 @@ import {
   dateFromDayMinutes,
 } from './dateTime';
 
+export const TIMELINE_HORIZONTAL_PADDING = 8;
+export const TIME_GUTTER_WIDTH = 52;
+export const TIMELINE_SCROLL_BOTTOM_PADDING = 48;
+
 export interface BlockLayout {
   blockId: string;
   top: number;

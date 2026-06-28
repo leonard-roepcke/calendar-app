@@ -1,6 +1,6 @@
 {
   "name": "calendar-app",
-  "version": "1.0.4",
+  "version": "1.04.0",
   "main": "index.ts",
   "dependencies": {
     "babel-preset-expo": "~56.0.0",

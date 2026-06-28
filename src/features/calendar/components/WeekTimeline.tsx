@@ -8,6 +8,8 @@ import {
   getTimelineMetrics,
   minutesToY,
   normalizeCreationRange,
+  TIMELINE_HORIZONTAL_PADDING,
+  TIMELINE_SCROLL_BOTTOM_PADDING,
   yToMinutes,
 } from '../../../shared/utils/layout';
 import { useWeekTimeline } from '../hooks/useWeekTimeline';
@@ -244,7 +246,7 @@ export function WeekTimeline({
     <GestureDetector gesture={scrollNativeGesture}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: 32 }}
+        contentContainerStyle={{ paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING }}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!scrollLocked}
       >
@@ -289,7 +291,7 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    paddingHorizontal: 8,
+    paddingHorizontal: TIMELINE_HORIZONTAL_PADDING,
     paddingTop: 4,
   },
   gridArea: {

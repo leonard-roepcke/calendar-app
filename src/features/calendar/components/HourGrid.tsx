@@ -1,7 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
 import { colors } from '../../../shared/theme/colors';
-import { getTimelineMetrics } from '../../../shared/utils/layout';
+import { getTimelineMetrics, TIME_GUTTER_WIDTH } from '../../../shared/utils/layout';
 
 interface HourGridProps {
   config: CalendarConfig;
@@ -24,6 +24,7 @@ export function HourGrid({ config }: HourGridProps) {
           <View style={styles.line} />
         </View>
       ))}
+      <View style={[styles.line, styles.endLine]} />
     </View>
   );
 }
@@ -51,6 +52,11 @@ export function TimeColumn({ config }: TimeColumnProps) {
           </Text>
         </View>
       ))}
+      <View style={styles.endLabelRow}>
+        <Text style={styles.endTimeLabel}>
+          {`${config.dayEndHour.toString().padStart(2, '0')}:00`}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -69,14 +75,31 @@ const styles = StyleSheet.create({
     height: StyleSheet.hairlineWidth,
     backgroundColor: colors.gridLine,
   },
+  endLine: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   timeColumn: {
-    width: 52,
+    width: TIME_GUTTER_WIDTH,
     paddingRight: 8,
   },
   timeLabelRow: {
     justifyContent: 'flex-start',
   },
   timeLabel: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: -6,
+  },
+  endLabelRow: {
+    position: 'absolute',
+    left: 0,
+    right: 8,
+    bottom: 0,
+  },
+  endTimeLabel: {
     fontSize: 11,
     color: colors.textSecondary,
     marginTop: -6,
