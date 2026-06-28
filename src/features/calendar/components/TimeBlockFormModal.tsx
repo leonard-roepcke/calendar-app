@@ -83,7 +83,6 @@ export function TimeBlockFormModal({
       ? blockToFormValues(initialBlock)
       : defaultFormValues(selectedDay, prefilledStartMinutes),
   );
-  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -95,23 +94,29 @@ export function TimeBlockFormModal({
     }
   }, [visible, initialBlock, prefilledStartMinutes, selectedDay]);
 
-  const handleSubmit = async () => {
-    setIsSaving(true);
-    try {
-      await onSubmit(values);
-      onClose();
-    } finally {
-      setIsSaving(false);
-    }
+  const dismiss = async () => {
+    const payload = {
+      ...values,
+      title: values.title.trim() || 'Neuer Termin',
+    };
+    await onSubmit(payload);
+    onClose();
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={() => void dismiss()}
+    >
       <View style={styles.backdrop}>
-        <View style={styles.sheet}>
+        <Pressable style={styles.backdropPress} onPress={() => void dismiss()} />
+        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
           <Text style={styles.heading}>
             {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
           </Text>
+          <Text style={styles.hint}>Tippe außerhalb zum Speichern und Schließen</Text>
 
           <Text style={styles.label}>Titel</Text>
           <TextInput
@@ -196,29 +201,11 @@ export function TimeBlockFormModal({
             multiline
           />
 
-          <View style={styles.actions}>
-            {isEditing && onDelete ? (
-              <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
-                <Text style={styles.deleteText}>Löschen</Text>
-              </Pressable>
-            ) : (
-              <View />
-            )}
-            <View style={styles.primaryActions}>
-              <Pressable onPress={onClose} style={styles.secondaryButton}>
-                <Text style={styles.secondaryText}>Abbrechen</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => void handleSubmit()}
-                disabled={isSaving}
-                style={[styles.primaryButton, isSaving && styles.disabledButton]}
-              >
-                <Text style={styles.primaryText}>
-                  {isSaving ? 'Speichern…' : 'Speichern'}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
+          {isEditing && onDelete ? (
+            <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
+              <Text style={styles.deleteText}>Löschen</Text>
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -228,8 +215,11 @@ export function TimeBlockFormModal({
 const styles = StyleSheet.create({
   backdrop: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
     justifyContent: 'flex-end',
+  },
+  backdropPress: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(15, 23, 42, 0.35)',
   },
   sheet: {
     backgroundColor: colors.background,
@@ -243,6 +233,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
     color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  hint: {
+    fontSize: 12,
+    color: colors.textSecondary,
     marginBottom: 4,
   },
   label: {
@@ -304,44 +299,12 @@ const styles = StyleSheet.create({
   colorSwatchSelected: {
     borderColor: colors.primary,
   },
-  actions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  primaryActions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  primaryText: {
-    color: colors.textInverse,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    borderRadius: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: colors.surface,
-  },
-  secondaryText: {
-    color: colors.textPrimary,
-    fontWeight: '500',
-  },
   deleteButton: {
     paddingVertical: 12,
+    marginTop: 8,
   },
   deleteText: {
     color: colors.danger,
     fontWeight: '600',
-  },
-  disabledButton: {
-    opacity: 0.6,
   },
 });

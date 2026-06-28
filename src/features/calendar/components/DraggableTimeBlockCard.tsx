@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -5,15 +6,11 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  type SharedValue,
 } from 'react-native-reanimated';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
 import type { TimeBlock, TimeBlockId } from '../../../domain/models/timeBlock';
 import type { BlockLayout } from '../../../shared/utils/layout';
-import {
-  getTimelineMetrics,
-  panTranslationToDeltas,
-} from '../../../shared/utils/layout';
+import { panTranslationToDeltas } from '../../../shared/utils/layout';
 import { colors } from '../../../shared/theme/colors';
 import { formatTime } from '../../../shared/utils/dateTime';
 
@@ -39,70 +36,6 @@ interface DraggableTimeBlockCardProps {
   onInteractionChange: (active: boolean) => void;
 }
 
-function createHandlePan(
-  mode: HandleMode,
-  config: CalendarConfig,
-  columnWidth: number,
-  blockId: TimeBlockId,
-  translateX: SharedValue<number>,
-  translateY: SharedValue<number>,
-  resizeTop: SharedValue<number>,
-  resizeHeight: SharedValue<number>,
-  isDragging: SharedValue<boolean>,
-  onFinish: (
-    id: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void,
-  onInteractionChange: (active: boolean) => void,
-) {
-  return Gesture.Pan()
-    .minDistance(0)
-    .onBegin(() => {
-      isDragging.value = true;
-      runOnJS(onInteractionChange)(true);
-    })
-    .onUpdate((event) => {
-      if (mode === 'move') {
-        translateX.value = event.translationX;
-        translateY.value = event.translationY;
-        return;
-      }
-
-      if (mode === 'resizeStart') {
-        resizeTop.value = event.translationY;
-        resizeHeight.value = -event.translationY;
-        return;
-      }
-
-      resizeHeight.value = event.translationY;
-    })
-    .onEnd((event) => {
-      isDragging.value = false;
-      runOnJS(onInteractionChange)(false);
-
-      const { deltaDays, deltaMinutes } = panTranslationToDeltas(
-        event.translationX,
-        event.translationY,
-        columnWidth,
-        config,
-      );
-
-      if (deltaDays !== 0 || deltaMinutes !== 0) {
-        runOnJS(onFinish)(blockId, deltaDays, deltaMinutes);
-      }
-
-      translateX.value = withSpring(0);
-      translateY.value = withSpring(0);
-      resizeTop.value = withSpring(0);
-      resizeHeight.value = withSpring(0);
-    })
-    .onFinalize(() => {
-      isDragging.value = false;
-      runOnJS(onInteractionChange)(false);
-    });
-}
-
 export function DraggableTimeBlockCard({
   block,
   layout,
@@ -119,55 +52,118 @@ export function DraggableTimeBlockCard({
   const resizeTop = useSharedValue(0);
   const resizeHeight = useSharedValue(0);
   const isDragging = useSharedValue(false);
+  const baseHeight = layout.height;
+  const minHeight = config.hourHeight / 4;
 
-  const movePan = createHandlePan(
-    'move',
-    config,
-    columnWidth,
-    block.id,
-    translateX,
-    translateY,
-    resizeTop,
-    resizeHeight,
-    isDragging,
-    onMove,
-    onInteractionChange,
+  const resetTransforms = useCallback(() => {
+    translateX.value = withSpring(0);
+    translateY.value = withSpring(0);
+    resizeTop.value = withSpring(0);
+    resizeHeight.value = withSpring(0);
+  }, [translateX, translateY, resizeTop, resizeHeight]);
+
+  const applyFinish = useCallback(
+    (
+      mode: HandleMode,
+      translationX: number,
+      translationY: number,
+      finish: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => void,
+    ) => {
+      const { deltaDays, deltaMinutes } = panTranslationToDeltas(
+        translationX,
+        translationY,
+        columnWidth,
+        config,
+      );
+
+      if (deltaDays !== 0 || deltaMinutes !== 0) {
+        finish(block.id, deltaDays, deltaMinutes);
+      }
+    },
+    [block.id, columnWidth, config],
   );
 
-  const startPan = createHandlePan(
-    'resizeStart',
-    config,
-    columnWidth,
-    block.id,
-    translateX,
-    translateY,
-    resizeTop,
-    resizeHeight,
-    isDragging,
-    onResizeStart,
-    onInteractionChange,
+  const finishMove = useCallback(
+    (translationX: number, translationY: number) => {
+      applyFinish('move', translationX, translationY, onMove);
+    },
+    [applyFinish, onMove],
   );
 
-  const endPan = createHandlePan(
-    'resizeEnd',
-    config,
-    columnWidth,
-    block.id,
-    translateX,
-    translateY,
-    resizeTop,
-    resizeHeight,
-    isDragging,
-    onResizeEnd,
-    onInteractionChange,
+  const finishResizeStart = useCallback(
+    (translationX: number, translationY: number) => {
+      applyFinish('resizeStart', translationX, translationY, onResizeStart);
+    },
+    [applyFinish, onResizeStart],
   );
+
+  const finishResizeEnd = useCallback(
+    (translationX: number, translationY: number) => {
+      applyFinish('resizeEnd', translationX, translationY, onResizeEnd);
+    },
+    [applyFinish, onResizeEnd],
+  );
+
+  const createHandlePan = useCallback(
+    (mode: HandleMode, onFinish: (tx: number, ty: number) => void) =>
+      Gesture.Pan()
+        .minDistance(0)
+        .onBegin(() => {
+          isDragging.value = true;
+          runOnJS(onInteractionChange)(true);
+        })
+        .onUpdate((event) => {
+          'worklet';
+          if (mode === 'move') {
+            translateX.value = event.translationX;
+            translateY.value = event.translationY;
+            return;
+          }
+
+          if (mode === 'resizeStart') {
+            resizeTop.value = event.translationY;
+            resizeHeight.value = -event.translationY;
+            return;
+          }
+
+          resizeHeight.value = event.translationY;
+        })
+        .onEnd((event) => {
+          'worklet';
+          isDragging.value = false;
+          runOnJS(onInteractionChange)(false);
+          runOnJS(onFinish)(event.translationX, event.translationY);
+          runOnJS(resetTransforms)();
+        })
+        .onFinalize((_event, success) => {
+          'worklet';
+          if (!success) {
+            isDragging.value = false;
+            runOnJS(onInteractionChange)(false);
+            runOnJS(resetTransforms)();
+          }
+        }),
+    [
+      isDragging,
+      onInteractionChange,
+      resetTransforms,
+      resizeHeight,
+      resizeTop,
+      translateX,
+      translateY,
+    ],
+  );
+
+  const movePan = createHandlePan('move', finishMove);
+  const startPan = createHandlePan('resizeStart', finishResizeStart);
+  const endPan = createHandlePan('resizeEnd', finishResizeEnd);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [
       { translateX: translateX.value },
       { translateY: translateY.value + resizeTop.value },
     ],
-    height: Math.max(layout.height + resizeHeight.value, config.hourHeight / 4),
+    height: Math.max(baseHeight + resizeHeight.value, minHeight),
     zIndex: isDragging.value ? 20 : 1,
     elevation: isDragging.value ? 8 : 2,
     opacity: isDragging.value ? 0.95 : 1,
@@ -196,19 +192,19 @@ export function DraggableTimeBlockCard({
       </Pressable>
 
       <GestureDetector gesture={startPan}>
-        <View style={[styles.handle, styles.handleTopLeft]}>
+        <View style={[styles.handle, styles.handleTopLeft]} collapsable={false}>
           <View style={[styles.dragDot, styles.dotResize]} />
         </View>
       </GestureDetector>
 
       <GestureDetector gesture={movePan}>
-        <View style={[styles.handle, styles.handleTopRight]}>
+        <View style={[styles.handle, styles.handleTopRight]} collapsable={false}>
           <View style={styles.dragDot} />
         </View>
       </GestureDetector>
 
       <GestureDetector gesture={endPan}>
-        <View style={[styles.handle, styles.handleBottomRight]}>
+        <View style={[styles.handle, styles.handleBottomRight]} collapsable={false}>
           <View style={[styles.dragDot, styles.dotResize]} />
         </View>
       </GestureDetector>
