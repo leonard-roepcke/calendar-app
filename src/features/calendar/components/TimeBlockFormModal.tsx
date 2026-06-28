@@ -82,7 +82,7 @@ export function TimeBlockFormModal({
   onClose,
   onSubmit,
   onDelete,
-}: TimeBlockFormModalProps {
+}: TimeBlockFormModalProps) {
   const isEditing = Boolean(initialBlock);
   const sheetOffset = useSharedValue(0);
 
