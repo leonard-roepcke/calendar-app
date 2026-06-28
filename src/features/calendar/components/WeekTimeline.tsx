@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -131,10 +131,10 @@ export function WeekTimeline({
       setCreationDraft({
         dayIndex: slot.dayIndex,
         startMinutes: slot.minutes,
-        endMinutes: slot.minutes + config.snapMinutes,
+        endMinutes: slot.minutes,
       });
     },
-    [config.snapMinutes, positionToSlot],
+    [positionToSlot],
   );
 
   const updateCreation = useCallback(
@@ -145,6 +145,9 @@ export function WeekTimeline({
         }
         const slot = positionToSlot(x, y);
         if (!slot) {
+          return current;
+        }
+        if (slot.minutes === current.startMinutes) {
           return current;
         }
         const normalized = normalizeCreationRange(
@@ -165,7 +168,7 @@ export function WeekTimeline({
   const finishCreation = useCallback(() => {
     setScrollLocked(false);
     setCreationDraft((current) => {
-      if (current) {
+      if (current && current.endMinutes > current.startMinutes) {
         onSlotCreate(current.dayIndex, current.startMinutes, current.endMinutes);
       }
       return null;
@@ -177,48 +180,74 @@ export function WeekTimeline({
     setCreationDraft(null);
   }, []);
 
-  const createGesture = Gesture.Pan()
-    .activateAfterLongPress(500)
-    .minDistance(0)
-    .onStart((event) => {
-      runOnJS(beginCreation)(event.x, event.y);
-    })
-    .onUpdate((event) => {
-      runOnJS(updateCreation)(event.x, event.y);
-    })
-    .onEnd(() => {
-      runOnJS(finishCreation)();
-    })
-    .onFinalize((_event, success) => {
-      if (!success) {
-        runOnJS(cancelCreation)();
-      }
-    });
+  const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
 
-  const weekSwipeGesture = Gesture.Pan()
-    .activeOffsetX([-28, 28])
-    .failOffsetY([-18, 18])
-    .onEnd((event) => {
-      if (event.translationX < -70) {
-        runOnJS(onNextWeek)();
-      } else if (event.translationX > 70) {
-        runOnJS(onPreviousWeek)();
-      }
-    });
+  const createGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activateAfterLongPress(500)
+        .minDistance(12)
+        .simultaneousWithExternalGesture(scrollNativeGesture)
+        .onStart((event) => {
+          runOnJS(beginCreation)(event.x, event.y);
+        })
+        .onUpdate((event) => {
+          runOnJS(updateCreation)(event.x, event.y);
+        })
+        .onEnd(() => {
+          runOnJS(finishCreation)();
+        })
+        .onFinalize((_event, success) => {
+          if (!success) {
+            runOnJS(cancelCreation)();
+          }
+        }),
+    [
+      beginCreation,
+      cancelCreation,
+      finishCreation,
+      scrollNativeGesture,
+      updateCreation,
+    ],
+  );
 
-  const gridGesture = Gesture.Simultaneous(createGesture, weekSwipeGesture);
+  const weekSwipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-28, 28])
+        .failOffsetY([-18, 18])
+        .simultaneousWithExternalGesture(scrollNativeGesture)
+        .onEnd((event) => {
+          if (event.translationX < -70) {
+            runOnJS(onNextWeek)();
+          } else if (event.translationX > 70) {
+            runOnJS(onPreviousWeek)();
+          }
+        }),
+    [onNextWeek, onPreviousWeek, scrollNativeGesture],
+  );
+
+  const gridGesture = useMemo(
+    () => Gesture.Simultaneous(createGesture, weekSwipeGesture),
+    [createGesture, weekSwipeGesture],
+  );
 
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);
   }, []);
 
+  const showCreationPreview =
+    creationDraft !== null &&
+    creationDraft.endMinutes > creationDraft.startMinutes;
+
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={{ paddingBottom: 32 }}
-      showsVerticalScrollIndicator={false}
-      scrollEnabled={!scrollLocked}
-    >
+    <GestureDetector gesture={scrollNativeGesture}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={{ paddingBottom: 32 }}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!scrollLocked}
+      >
       <View style={styles.row}>
         <TimeColumn config={config} />
         <View style={styles.gridArea} onLayout={handleLayout}>
@@ -226,7 +255,7 @@ export function WeekTimeline({
           <GestureDetector gesture={gridGesture}>
             <View style={[styles.touchLayer, { height: metrics.totalHeight }]} />
           </GestureDetector>
-          {creationDraft && columnWidth > 0 ? (
+          {showCreationPreview && creationDraft && columnWidth > 0 ? (
             <CreationPreview
               draft={creationDraft}
               config={config}
@@ -248,7 +277,8 @@ export function WeekTimeline({
           ) : null}
         </View>
       </View>
-    </ScrollView>
+      </ScrollView>
+    </GestureDetector>
   );
 }
 
