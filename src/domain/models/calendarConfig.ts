@@ -6,8 +6,8 @@ export interface CalendarConfig {
 }
 
 export const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
-  dayStartHour: 6,
-  dayEndHour: 22,
-  hourHeight: 64,
+  dayStartHour: 0,
+  dayEndHour: 24,
+  hourHeight: 56,
   snapMinutes: 15,
 };

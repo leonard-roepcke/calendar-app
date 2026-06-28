@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -8,6 +8,13 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
 import {
@@ -34,7 +41,9 @@ interface TimeBlockFormModalProps {
   onDelete?: () => Promise<void>;
 }
 
-const START_OPTIONS = [8 * 60, 9 * 60, 10 * 60, 11 * 60, 13 * 60, 14 * 60, 15 * 60];
+const START_OPTIONS = Array.from({ length: 24 }, (_, hour) => hour * 60).filter(
+  (minutes) => minutes >= 6 * 60 && minutes <= 20 * 60,
+);
 const DURATION_OPTIONS = [30, 45, 60, 90, 120];
 
 function blockToFormValues(block: TimeBlock): TimeBlockFormValues {
@@ -77,6 +86,7 @@ export function TimeBlockFormModal({
   onDelete,
 }: TimeBlockFormModalProps) {
   const isEditing = Boolean(initialBlock);
+  const sheetOffset = useSharedValue(0);
 
   const [values, setValues] = useState<TimeBlockFormValues>(() =>
     initialBlock
@@ -86,22 +96,41 @@ export function TimeBlockFormModal({
 
   useEffect(() => {
     if (visible) {
+      sheetOffset.value = 0;
       setValues(
         initialBlock
           ? blockToFormValues(initialBlock)
           : defaultFormValues(selectedDay, prefilledStartMinutes),
       );
     }
-  }, [visible, initialBlock, prefilledStartMinutes, selectedDay]);
+  }, [visible, initialBlock, prefilledStartMinutes, selectedDay, sheetOffset]);
 
-  const dismiss = async () => {
+  const dismiss = useCallback(async () => {
     const payload = {
       ...values,
       title: values.title.trim() || 'Neuer Termin',
     };
     await onSubmit(payload);
     onClose();
-  };
+  }, [onClose, onSubmit, values]);
+
+  const swipeGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      if (event.translationY > 0) {
+        sheetOffset.value = event.translationY;
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY > 100 || event.velocityY > 800) {
+        runOnJS(dismiss)();
+        return;
+      }
+      sheetOffset.value = withSpring(0);
+    });
+
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetOffset.value }],
+  }));
 
   return (
     <Modal
@@ -112,101 +141,106 @@ export function TimeBlockFormModal({
     >
       <View style={styles.backdrop}>
         <Pressable style={styles.backdropPress} onPress={() => void dismiss()} />
-        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-          <Text style={styles.heading}>
-            {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
-          </Text>
-          <Text style={styles.hint}>Tippe außerhalb zum Speichern und Schließen</Text>
+        <GestureDetector gesture={swipeGesture}>
+          <Animated.View style={[styles.sheet, sheetStyle]}>
+            <View style={styles.dragHandle} />
+            <Text style={styles.heading}>
+              {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
+            </Text>
+            <Text style={styles.hint}>
+              Nach unten wischen oder außerhalb tippen zum Schließen
+            </Text>
 
-          <Text style={styles.label}>Titel</Text>
-          <TextInput
-            value={values.title}
-            onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-            placeholder="z. B. Deep Work"
-            style={styles.input}
-          />
+            <Text style={styles.label}>Titel</Text>
+            <TextInput
+              value={values.title}
+              onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+              placeholder="z. B. Deep Work"
+              style={styles.input}
+            />
 
-          <Text style={styles.label}>Start</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            {START_OPTIONS.map((minutes) => {
-              const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
-              const selected = values.startMinutes === minutes;
-              return (
-                <Pressable
-                  key={minutes}
-                  onPress={() =>
-                    setValues((current) => ({
-                      ...current,
-                      startMinutes: minutes,
-                      endMinutes: Math.max(current.endMinutes, minutes + 15),
-                    }))
-                  }
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+            <Text style={styles.label}>Start</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {START_OPTIONS.map((minutes) => {
+                const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
+                const selected = values.startMinutes === minutes;
+                return (
+                  <Pressable
+                    key={minutes}
+                    onPress={() =>
+                      setValues((current) => ({
+                        ...current,
+                        startMinutes: minutes,
+                        endMinutes: Math.max(current.endMinutes, minutes + 15),
+                      }))
+                    }
+                    style={[styles.chip, selected && styles.chipSelected]}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
 
-          <Text style={styles.label}>Dauer</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-            {DURATION_OPTIONS.map((duration) => {
-              const selected = values.endMinutes - values.startMinutes === duration;
-              return (
-                <Pressable
-                  key={duration}
-                  onPress={() =>
-                    setValues((current) => ({
-                      ...current,
-                      endMinutes: current.startMinutes + duration,
-                    }))
-                  }
-                  style={[styles.chip, selected && styles.chipSelected]}
-                >
-                  <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                    {duration} Min
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+            <Text style={styles.label}>Dauer</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+              {DURATION_OPTIONS.map((duration) => {
+                const selected = values.endMinutes - values.startMinutes === duration;
+                return (
+                  <Pressable
+                    key={duration}
+                    onPress={() =>
+                      setValues((current) => ({
+                        ...current,
+                        endMinutes: current.startMinutes + duration,
+                      }))
+                    }
+                    style={[styles.chip, selected && styles.chipSelected]}
+                  >
+                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                      {duration} Min
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
 
-          <Text style={styles.label}>Farbe</Text>
-          <View style={styles.colorRow}>
-            {blockColorOptions.map((color) => {
-              const selected = values.color === color;
-              return (
-                <Pressable
-                  key={color}
-                  onPress={() => setValues((current) => ({ ...current, color }))}
-                  style={[
-                    styles.colorSwatch,
-                    { backgroundColor: color },
-                    selected && styles.colorSwatchSelected,
-                  ]}
-                />
-              );
-            })}
-          </View>
+            <Text style={styles.label}>Farbe</Text>
+            <View style={styles.colorRow}>
+              {blockColorOptions.map((color) => {
+                const selected = values.color === color;
+                return (
+                  <Pressable
+                    key={color}
+                    onPress={() => setValues((current) => ({ ...current, color }))}
+                    style={[
+                      styles.colorSwatch,
+                      { backgroundColor: color },
+                      selected && styles.colorSwatchSelected,
+                    ]}
+                  />
+                );
+              })}
+            </View>
 
-          <Text style={styles.label}>Notizen</Text>
-          <TextInput
-            value={values.notes}
-            onChangeText={(notes) => setValues((current) => ({ ...current, notes }))}
-            placeholder="Optional"
-            style={[styles.input, styles.notesInput]}
-            multiline
-          />
+            <Text style={styles.label}>Notizen</Text>
+            <TextInput
+              value={values.notes}
+              onChangeText={(notes) => setValues((current) => ({ ...current, notes }))}
+              placeholder="Optional"
+              style={[styles.input, styles.notesInput]}
+              multiline
+            />
 
-          {isEditing && onDelete ? (
-            <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
-              <Text style={styles.deleteText}>Löschen</Text>
-            </Pressable>
-          ) : null}
-        </View>
+            {isEditing && onDelete ? (
+              <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
+                <Text style={styles.deleteText}>Löschen</Text>
+              </Pressable>
+            ) : null}
+          </Animated.View>
+        </GestureDetector>
       </View>
     </Modal>
   );
@@ -226,8 +260,17 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
+    paddingTop: 10,
     gap: 8,
     maxHeight: '88%',
+  },
+  dragHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.border,
+    marginBottom: 8,
   },
   heading: {
     fontSize: 20,

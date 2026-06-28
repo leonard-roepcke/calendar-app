@@ -131,16 +131,11 @@ export function computeBlockMove(
   weekStart: Date,
   deltaDays: number,
   deltaMinutes: number,
-  config: CalendarConfig,
 ): { startAt: Date; endAt: Date } | null {
   const duration = durationMinutes(block.startAt, block.endAt);
   const currentDayIndex = daysBetween(weekStart, block.startAt);
-  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
-  const newStartMinutes = clampMinutes(
-    minutesSinceStartOfDay(block.startAt) + deltaMinutes,
-    config.dayStartHour * 60,
-    config.dayEndHour * 60 - duration,
-  );
+  const newDayIndex = currentDayIndex + deltaDays;
+  const newStartMinutes = minutesSinceStartOfDay(block.startAt) + deltaMinutes;
 
   const newDay = addDays(startOfDay(block.startAt), newDayIndex - currentDayIndex);
   const startAt = dateFromDayMinutes(newDay, newStartMinutes);
@@ -153,38 +148,57 @@ export function computeBlockMove(
   return { startAt, endAt };
 }
 
-export function panTranslationToDeltas(
+export function snapPanTranslation(
   translationX: number,
   translationY: number,
   columnWidth: number,
   config: CalendarConfig,
-): { deltaDays: number; deltaMinutes: number } {
+): { snappedX: number; snappedY: number; deltaDays: number; deltaMinutes: number } {
   const deltaDays = columnWidth > 0 ? Math.round(translationX / columnWidth) : 0;
   const metrics = getTimelineMetrics(config);
   const rawMinutes = translationY * metrics.minutesPerPixel;
   const deltaMinutes =
     Math.round(rawMinutes / config.snapMinutes) * config.snapMinutes;
-  return { deltaDays, deltaMinutes };
+
+  return {
+    snappedX: deltaDays * columnWidth,
+    snappedY: deltaMinutes / metrics.minutesPerPixel,
+    deltaDays,
+    deltaMinutes,
+  };
+}
+
+export function panTranslationToDeltas(
+  translationX: number,
+  translationY: number,
+  columnWidth: number,
+  config: CalendarConfig,
+  verticalOnly = false,
+): { deltaDays: number; deltaMinutes: number } {
+  const snapped = snapPanTranslation(
+    verticalOnly ? 0 : translationX,
+    translationY,
+    columnWidth,
+    config,
+  );
+  return {
+    deltaDays: snapped.deltaDays,
+    deltaMinutes: snapped.deltaMinutes,
+  };
 }
 
 export function computeBlockResizeStart(
   block: TimeBlock,
-  weekStart: Date,
-  deltaDays: number,
   deltaMinutes: number,
-  config: CalendarConfig,
 ): { startAt: Date; endAt: Date } | null {
   const endMinutes = minutesSinceStartOfDay(block.endAt);
-  const currentDayIndex = daysBetween(weekStart, block.startAt);
-  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
-  const newStartMinutes = clampMinutes(
-    minutesSinceStartOfDay(block.startAt) + deltaMinutes,
-    config.dayStartHour * 60,
-    endMinutes - config.snapMinutes,
-  );
+  const newStartMinutes = minutesSinceStartOfDay(block.startAt) + deltaMinutes;
 
-  const newDay = addDays(startOfDay(block.startAt), newDayIndex - currentDayIndex);
-  const startAt = dateFromDayMinutes(newDay, newStartMinutes);
+  if (newStartMinutes >= endMinutes) {
+    return null;
+  }
+
+  const startAt = dateFromDayMinutes(block.startAt, newStartMinutes);
   const endAt = new Date(block.endAt);
 
   if (validateTimeRange(startAt, endAt)) {
@@ -196,23 +210,17 @@ export function computeBlockResizeStart(
 
 export function computeBlockResizeEnd(
   block: TimeBlock,
-  weekStart: Date,
-  deltaDays: number,
   deltaMinutes: number,
-  config: CalendarConfig,
 ): { startAt: Date; endAt: Date } | null {
   const startMinutes = minutesSinceStartOfDay(block.startAt);
-  const currentDayIndex = daysBetween(weekStart, block.endAt);
-  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
-  const newEndMinutes = clampMinutes(
-    minutesSinceStartOfDay(block.endAt) + deltaMinutes,
-    startMinutes + config.snapMinutes,
-    config.dayEndHour * 60,
-  );
+  const newEndMinutes = minutesSinceStartOfDay(block.endAt) + deltaMinutes;
 
-  const newDay = addDays(startOfDay(block.endAt), newDayIndex - currentDayIndex);
+  if (newEndMinutes <= startMinutes) {
+    return null;
+  }
+
   const startAt = new Date(block.startAt);
-  const endAt = dateFromDayMinutes(newDay, newEndMinutes);
+  const endAt = dateFromDayMinutes(block.endAt, newEndMinutes);
 
   if (validateTimeRange(startAt, endAt)) {
     return null;

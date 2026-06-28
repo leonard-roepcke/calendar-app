@@ -22,19 +22,13 @@ export interface SlotCreationDraft {
 
 interface WeekTimelineProps {
   config: CalendarConfig;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
   onSlotCreate: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: string, deltaDays: number, deltaMinutes: number) => void;
-  onBlockResizeStart: (
-    blockId: string,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
-  onBlockResizeEnd: (
-    blockId: string,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
+  onBlockResizeStart: (blockId: string, deltaMinutes: number) => void;
+  onBlockResizeEnd: (blockId: string, deltaMinutes: number) => void;
 }
 
 function WeekHourGrid({
@@ -97,6 +91,8 @@ function CreationPreview({
 
 export function WeekTimeline({
   config,
+  onPreviousWeek,
+  onNextWeek,
   onSlotCreate,
   onBlockPress,
   onBlockMove,
@@ -182,7 +178,7 @@ export function WeekTimeline({
   }, []);
 
   const createGesture = Gesture.Pan()
-    .activateAfterLongPress(400)
+    .activateAfterLongPress(500)
     .minDistance(0)
     .onStart((event) => {
       runOnJS(beginCreation)(event.x, event.y);
@@ -199,6 +195,19 @@ export function WeekTimeline({
       }
     });
 
+  const weekSwipeGesture = Gesture.Pan()
+    .activeOffsetX([-28, 28])
+    .failOffsetY([-18, 18])
+    .onEnd((event) => {
+      if (event.translationX < -70) {
+        runOnJS(onNextWeek)();
+      } else if (event.translationX > 70) {
+        runOnJS(onPreviousWeek)();
+      }
+    });
+
+  const gridGesture = Gesture.Simultaneous(createGesture, weekSwipeGesture);
+
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);
   }, []);
@@ -214,7 +223,7 @@ export function WeekTimeline({
         <TimeColumn config={config} />
         <View style={styles.gridArea} onLayout={handleLayout}>
           <WeekHourGrid config={config} columnCount={7} />
-          <GestureDetector gesture={createGesture}>
+          <GestureDetector gesture={gridGesture}>
             <View style={[styles.touchLayer, { height: metrics.totalHeight }]} />
           </GestureDetector>
           {creationDraft && columnWidth > 0 ? (

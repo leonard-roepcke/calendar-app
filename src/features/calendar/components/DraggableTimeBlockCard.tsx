@@ -10,7 +10,10 @@ import Animated, {
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
 import type { TimeBlock, TimeBlockId } from '../../../domain/models/timeBlock';
 import type { BlockLayout } from '../../../shared/utils/layout';
-import { panTranslationToDeltas } from '../../../shared/utils/layout';
+import {
+  getTimelineMetrics,
+  panTranslationToDeltas,
+} from '../../../shared/utils/layout';
 import { colors } from '../../../shared/theme/colors';
 import { formatTime } from '../../../shared/utils/dateTime';
 
@@ -23,16 +26,8 @@ interface DraggableTimeBlockCardProps {
   columnWidth: number;
   onPress: () => void;
   onMove: (blockId: TimeBlockId, deltaDays: number, deltaMinutes: number) => void;
-  onResizeStart: (
-    blockId: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
-  onResizeEnd: (
-    blockId: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
+  onResizeStart: (blockId: TimeBlockId, deltaMinutes: number) => void;
+  onResizeEnd: (blockId: TimeBlockId, deltaMinutes: number) => void;
   onInteractionChange: (active: boolean) => void;
 }
 
@@ -54,6 +49,8 @@ export function DraggableTimeBlockCard({
   const isDragging = useSharedValue(false);
   const baseHeight = layout.height;
   const minHeight = config.hourHeight / 4;
+  const metrics = getTimelineMetrics(config);
+  const snapMinutes = config.snapMinutes;
 
   const resetTransforms = useCallback(() => {
     translateX.value = withSpring(0);
@@ -62,46 +59,51 @@ export function DraggableTimeBlockCard({
     resizeHeight.value = withSpring(0);
   }, [translateX, translateY, resizeTop, resizeHeight]);
 
-  const applyFinish = useCallback(
-    (
-      mode: HandleMode,
-      translationX: number,
-      translationY: number,
-      finish: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => void,
-    ) => {
+  const finishMove = useCallback(
+    (translationX: number, translationY: number) => {
       const { deltaDays, deltaMinutes } = panTranslationToDeltas(
         translationX,
         translationY,
         columnWidth,
         config,
       );
-
       if (deltaDays !== 0 || deltaMinutes !== 0) {
-        finish(block.id, deltaDays, deltaMinutes);
+        onMove(block.id, deltaDays, deltaMinutes);
       }
     },
-    [block.id, columnWidth, config],
-  );
-
-  const finishMove = useCallback(
-    (translationX: number, translationY: number) => {
-      applyFinish('move', translationX, translationY, onMove);
-    },
-    [applyFinish, onMove],
+    [block.id, columnWidth, config, onMove],
   );
 
   const finishResizeStart = useCallback(
-    (translationX: number, translationY: number) => {
-      applyFinish('resizeStart', translationX, translationY, onResizeStart);
+    (_translationX: number, translationY: number) => {
+      const { deltaMinutes } = panTranslationToDeltas(
+        0,
+        translationY,
+        columnWidth,
+        config,
+        true,
+      );
+      if (deltaMinutes !== 0) {
+        onResizeStart(block.id, deltaMinutes);
+      }
     },
-    [applyFinish, onResizeStart],
+    [block.id, columnWidth, config, onResizeStart],
   );
 
   const finishResizeEnd = useCallback(
-    (translationX: number, translationY: number) => {
-      applyFinish('resizeEnd', translationX, translationY, onResizeEnd);
+    (_translationX: number, translationY: number) => {
+      const { deltaMinutes } = panTranslationToDeltas(
+        0,
+        translationY,
+        columnWidth,
+        config,
+        true,
+      );
+      if (deltaMinutes !== 0) {
+        onResizeEnd(block.id, deltaMinutes);
+      }
     },
-    [applyFinish, onResizeEnd],
+    [block.id, columnWidth, config, onResizeEnd],
   );
 
   const createHandlePan = useCallback(
@@ -115,18 +117,29 @@ export function DraggableTimeBlockCard({
         .onUpdate((event) => {
           'worklet';
           if (mode === 'move') {
-            translateX.value = event.translationX;
-            translateY.value = event.translationY;
+            const deltaDays =
+              columnWidth > 0 ? Math.round(event.translationX / columnWidth) : 0;
+            const rawMinutes = event.translationY * metrics.minutesPerPixel;
+            const deltaMinutes =
+              Math.round(rawMinutes / snapMinutes) * snapMinutes;
+            translateX.value = deltaDays * columnWidth;
+            translateY.value = deltaMinutes / metrics.minutesPerPixel;
             return;
           }
 
           if (mode === 'resizeStart') {
-            resizeTop.value = event.translationY;
-            resizeHeight.value = -event.translationY;
+            const rawMinutes = event.translationY * metrics.minutesPerPixel;
+            const deltaMinutes =
+              Math.round(rawMinutes / snapMinutes) * snapMinutes;
+            const snappedY = deltaMinutes / metrics.minutesPerPixel;
+            resizeTop.value = snappedY;
+            resizeHeight.value = -snappedY;
             return;
           }
 
-          resizeHeight.value = event.translationY;
+          const rawMinutes = event.translationY * metrics.minutesPerPixel;
+          const deltaMinutes = Math.round(rawMinutes / snapMinutes) * snapMinutes;
+          resizeHeight.value = deltaMinutes / metrics.minutesPerPixel;
         })
         .onEnd((event) => {
           'worklet';
@@ -144,11 +157,15 @@ export function DraggableTimeBlockCard({
           }
         }),
     [
+      columnWidth,
+      config,
       isDragging,
+      metrics.minutesPerPixel,
       onInteractionChange,
       resetTransforms,
       resizeHeight,
       resizeTop,
+      snapMinutes,
       translateX,
       translateY,
     ],
@@ -219,16 +236,8 @@ interface DraggableTimeBlockLayerProps {
   columnWidth: number;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: TimeBlockId, deltaDays: number, deltaMinutes: number) => void;
-  onBlockResizeStart: (
-    blockId: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
-  onBlockResizeEnd: (
-    blockId: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => void;
+  onBlockResizeStart: (blockId: TimeBlockId, deltaMinutes: number) => void;
+  onBlockResizeEnd: (blockId: TimeBlockId, deltaMinutes: number) => void;
   onInteractionChange: (active: boolean) => void;
 }
 

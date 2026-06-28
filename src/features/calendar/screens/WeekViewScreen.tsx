@@ -14,9 +14,8 @@ import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
 } from '../components/TimeBlockFormModal';
-import { WeekDayColumnHeader } from '../components/WeekDayColumnHeader';
-import { WeekHeader } from '../components/WeekHeader';
 import { WeekTimeline } from '../components/WeekTimeline';
+import { WeekToolbar } from '../components/WeekToolbar';
 import { useCalendar } from '../store/CalendarProvider';
 
 export function WeekViewScreen() {
@@ -94,7 +93,6 @@ export function WeekViewScreen() {
         color: values.color,
         notes: values.notes || undefined,
       });
-      return;
     }
   };
 
@@ -108,13 +106,13 @@ export function WeekViewScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <WeekHeader
+      <WeekToolbar
+        weekDays={weekDays}
         weekStart={selectedWeekStart}
         onPrevious={goToPreviousWeek}
         onNext={goToNextWeek}
         onToday={goToToday}
       />
-      <WeekDayColumnHeader weekDays={weekDays} />
 
       {error ? (
         <Pressable style={styles.errorBanner} onPress={clearError}>
@@ -129,6 +127,8 @@ export function WeekViewScreen() {
       ) : (
         <WeekTimeline
           config={config}
+          onPreviousWeek={goToPreviousWeek}
+          onNextWeek={goToNextWeek}
           onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
             void handleSlotCreate(dayIndex, startMinutes, endMinutes);
           }}
@@ -136,11 +136,11 @@ export function WeekViewScreen() {
           onBlockMove={(blockId, deltaDays, deltaMinutes) => {
             void moveBlock(blockId, deltaDays, deltaMinutes);
           }}
-          onBlockResizeStart={(blockId, deltaDays, deltaMinutes) => {
-            void resizeBlockStart(blockId, deltaDays, deltaMinutes);
+          onBlockResizeStart={(blockId, deltaMinutes) => {
+            void resizeBlockStart(blockId, deltaMinutes);
           }}
-          onBlockResizeEnd={(blockId, deltaDays, deltaMinutes) => {
-            void resizeBlockEnd(blockId, deltaDays, deltaMinutes);
+          onBlockResizeEnd={(blockId, deltaMinutes) => {
+            void resizeBlockEnd(blockId, deltaMinutes);
           }}
         />
       )}

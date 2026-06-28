@@ -86,16 +86,8 @@ interface CalendarContextValue {
   updateBlock: (input: UpdateTimeBlockInput) => Promise<void>;
   removeBlock: (id: TimeBlockId) => Promise<void>;
   moveBlock: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => Promise<void>;
-  resizeBlockStart: (
-    id: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => Promise<void>;
-  resizeBlockEnd: (
-    id: TimeBlockId,
-    deltaDays: number,
-    deltaMinutes: number,
-  ) => Promise<void>;
+  resizeBlockStart: (id: TimeBlockId, deltaMinutes: number) => Promise<void>;
+  resizeBlockEnd: (id: TimeBlockId, deltaMinutes: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -213,7 +205,6 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         state.selectedWeekStart,
         deltaDays,
         deltaMinutes,
-        DEFAULT_CALENDAR_CONFIG,
       );
       if (!times) {
         return;
@@ -229,19 +220,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   );
 
   const resizeBlockStart = useCallback(
-    async (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => {
+    async (id: TimeBlockId, deltaMinutes: number) => {
       const block = state.blocks.find((item) => item.id === id);
       if (!block) {
         return;
       }
 
-      const times = computeBlockResizeStart(
-        block,
-        state.selectedWeekStart,
-        deltaDays,
-        deltaMinutes,
-        DEFAULT_CALENDAR_CONFIG,
-      );
+      const times = computeBlockResizeStart(block, deltaMinutes);
       if (!times) {
         return;
       }
@@ -256,19 +241,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   );
 
   const resizeBlockEnd = useCallback(
-    async (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => {
+    async (id: TimeBlockId, deltaMinutes: number) => {
       const block = state.blocks.find((item) => item.id === id);
       if (!block) {
         return;
       }
 
-      const times = computeBlockResizeEnd(
-        block,
-        state.selectedWeekStart,
-        deltaDays,
-        deltaMinutes,
-        DEFAULT_CALENDAR_CONFIG,
-      );
+      const times = computeBlockResizeEnd(block, deltaMinutes);
       if (!times) {
         return;
       }
