@@ -1,12 +1,22 @@
 import { StatusBar } from 'expo-status-bar';
+import { StyleSheet } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { WeekViewScreen } from '../features/calendar/screens/WeekViewScreen';
 import { CalendarProvider } from '../features/calendar/store/CalendarProvider';
-import { DayViewScreen } from '../features/calendar/screens/DayViewScreen';
 
 export function CalendarApp() {
   return (
-    <CalendarProvider>
-      <DayViewScreen />
-      <StatusBar style="dark" />
-    </CalendarProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <CalendarProvider>
+        <WeekViewScreen />
+        <StatusBar style="dark" />
+      </CalendarProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+});

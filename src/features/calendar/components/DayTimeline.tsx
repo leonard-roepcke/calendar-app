@@ -15,17 +15,19 @@ import { TimeBlockLayer } from './TimeBlockCard';
 
 interface DayTimelineProps {
   config: CalendarConfig;
+  selectedDay: Date;
   onSlotPress: (minutesFromMidnight: number) => void;
   onBlockPress: (blockId: string) => void;
 }
 
 export function DayTimeline({
   config,
+  selectedDay,
   onSlotPress,
   onBlockPress,
 }: DayTimelineProps) {
   const [contentWidth, setContentWidth] = useState(0);
-  const { layouts, blocks } = useDayTimeline(contentWidth);
+  const { layouts, blocks } = useDayTimeline(contentWidth, selectedDay);
   const metrics = getTimelineMetrics(config);
 
   const handleLayout = (event: LayoutChangeEvent) => {

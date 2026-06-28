@@ -17,10 +17,17 @@ import type {
   TimeBlockId,
   UpdateTimeBlockInput,
 } from '../../../domain/models/timeBlock';
-import { addDays, startOfDay } from '../../../shared/utils/dateTime';
+import { computeBlockMove } from '../../../shared/utils/layout';
+import {
+  addDays,
+  getWeekDays,
+  isDateInWeek,
+  startOfDay,
+  startOfWeek,
+} from '../../../shared/utils/dateTime';
 
 interface CalendarState {
-  selectedDay: Date;
+  selectedWeekStart: Date;
   blocks: TimeBlock[];
   isLoading: boolean;
   error: string | null;
@@ -30,7 +37,7 @@ type CalendarAction =
   | { type: 'SET_LOADING'; isLoading: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_BLOCKS'; blocks: TimeBlock[] }
-  | { type: 'SET_SELECTED_DAY'; day: Date }
+  | { type: 'SET_WEEK_START'; weekStart: Date }
   | { type: 'ADD_BLOCK'; block: TimeBlock }
   | { type: 'UPDATE_BLOCK'; block: TimeBlock }
   | { type: 'REMOVE_BLOCK'; id: TimeBlockId };
@@ -43,8 +50,8 @@ function calendarReducer(state: CalendarState, action: CalendarAction): Calendar
       return { ...state, error: action.error };
     case 'SET_BLOCKS':
       return { ...state, blocks: action.blocks };
-    case 'SET_SELECTED_DAY':
-      return { ...state, selectedDay: action.day, error: null };
+    case 'SET_WEEK_START':
+      return { ...state, selectedWeekStart: action.weekStart, error: null };
     case 'ADD_BLOCK':
       return { ...state, blocks: [...state.blocks, action.block] };
     case 'UPDATE_BLOCK':
@@ -66,17 +73,19 @@ function calendarReducer(state: CalendarState, action: CalendarAction): Calendar
 
 interface CalendarContextValue {
   config: typeof DEFAULT_CALENDAR_CONFIG;
-  selectedDay: Date;
+  selectedWeekStart: Date;
+  weekDays: Date[];
   blocks: TimeBlock[];
   isLoading: boolean;
   error: string | null;
-  goToPreviousDay: () => void;
-  goToNextDay: () => void;
+  goToPreviousWeek: () => void;
+  goToNextWeek: () => void;
   goToToday: () => void;
-  refreshDay: () => Promise<void>;
+  refreshWeek: () => Promise<void>;
   createBlock: (input: CreateTimeBlockInput) => Promise<void>;
   updateBlock: (input: UpdateTimeBlockInput) => Promise<void>;
   removeBlock: (id: TimeBlockId) => Promise<void>;
+  moveBlock: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => Promise<void>;
   clearError: () => void;
 }
 
@@ -87,16 +96,21 @@ const timeBlockService = new TimeBlockService(repository);
 
 export function CalendarProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(calendarReducer, {
-    selectedDay: startOfDay(new Date()),
+    selectedWeekStart: startOfWeek(new Date()),
     blocks: [],
     isLoading: true,
     error: null,
   });
 
-  const refreshDay = useCallback(async () => {
+  const weekDays = useMemo(
+    () => getWeekDays(state.selectedWeekStart),
+    [state.selectedWeekStart],
+  );
+
+  const refreshWeek = useCallback(async () => {
     dispatch({ type: 'SET_LOADING', isLoading: true });
     try {
-      const blocks = await timeBlockService.listDay(state.selectedDay);
+      const blocks = await timeBlockService.listWeek(state.selectedWeekStart);
       dispatch({ type: 'SET_BLOCKS', blocks });
       dispatch({ type: 'SET_ERROR', error: null });
     } catch (error) {
@@ -107,29 +121,35 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     } finally {
       dispatch({ type: 'SET_LOADING', isLoading: false });
     }
-  }, [state.selectedDay]);
+  }, [state.selectedWeekStart]);
 
   useEffect(() => {
-    void refreshDay();
-  }, [refreshDay]);
+    void refreshWeek();
+  }, [refreshWeek]);
 
-  const goToPreviousDay = useCallback(() => {
-    dispatch({ type: 'SET_SELECTED_DAY', day: addDays(state.selectedDay, -1) });
-  }, [state.selectedDay]);
+  const goToPreviousWeek = useCallback(() => {
+    dispatch({
+      type: 'SET_WEEK_START',
+      weekStart: addDays(state.selectedWeekStart, -7),
+    });
+  }, [state.selectedWeekStart]);
 
-  const goToNextDay = useCallback(() => {
-    dispatch({ type: 'SET_SELECTED_DAY', day: addDays(state.selectedDay, 1) });
-  }, [state.selectedDay]);
+  const goToNextWeek = useCallback(() => {
+    dispatch({
+      type: 'SET_WEEK_START',
+      weekStart: addDays(state.selectedWeekStart, 7),
+    });
+  }, [state.selectedWeekStart]);
 
   const goToToday = useCallback(() => {
-    dispatch({ type: 'SET_SELECTED_DAY', day: startOfDay(new Date()) });
+    dispatch({ type: 'SET_WEEK_START', weekStart: startOfWeek(new Date()) });
   }, []);
 
   const createBlock = useCallback(
     async (input: CreateTimeBlockInput) => {
       try {
         const block = await timeBlockService.create(input);
-        if (block.startAt.toDateString() === state.selectedDay.toDateString()) {
+        if (isDateInWeek(block.startAt, state.selectedWeekStart)) {
           dispatch({ type: 'ADD_BLOCK', block });
         }
         dispatch({ type: 'SET_ERROR', error: null });
@@ -141,27 +161,61 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         throw error;
       }
     },
-    [state.selectedDay],
+    [state.selectedWeekStart],
   );
 
-  const updateBlock = useCallback(async (input: UpdateTimeBlockInput) => {
-    try {
-      const block = await timeBlockService.update(input);
-      dispatch({ type: 'UPDATE_BLOCK', block });
-      dispatch({ type: 'SET_ERROR', error: null });
-    } catch (error) {
-      dispatch({
-        type: 'SET_ERROR',
-        error: error instanceof Error ? error.message : 'Aktualisieren fehlgeschlagen',
-      });
-      throw error;
-    }
-  }, []);
+  const updateBlock = useCallback(
+    async (input: UpdateTimeBlockInput) => {
+      try {
+        const block = await timeBlockService.update(input);
+        if (isDateInWeek(block.startAt, state.selectedWeekStart)) {
+          dispatch({ type: 'UPDATE_BLOCK', block });
+        } else {
+          dispatch({ type: 'REMOVE_BLOCK', id: block.id });
+        }
+        dispatch({ type: 'SET_ERROR', error: null });
+      } catch (error) {
+        dispatch({
+          type: 'SET_ERROR',
+          error: error instanceof Error ? error.message : 'Aktualisieren fehlgeschlagen',
+        });
+        throw error;
+      }
+    },
+    [state.selectedWeekStart],
+  );
 
   const removeBlock = useCallback(async (id: TimeBlockId) => {
     await timeBlockService.remove(id);
     dispatch({ type: 'REMOVE_BLOCK', id });
   }, []);
+
+  const moveBlock = useCallback(
+    async (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => {
+      const block = state.blocks.find((item) => item.id === id);
+      if (!block) {
+        return;
+      }
+
+      const times = computeBlockMove(
+        block,
+        state.selectedWeekStart,
+        deltaDays,
+        deltaMinutes,
+        DEFAULT_CALENDAR_CONFIG,
+      );
+      if (!times) {
+        return;
+      }
+
+      await updateBlock({
+        id,
+        startAt: times.startAt,
+        endAt: times.endAt,
+      });
+    },
+    [state.blocks, state.selectedWeekStart, updateBlock],
+  );
 
   const clearError = useCallback(() => {
     dispatch({ type: 'SET_ERROR', error: null });
@@ -170,28 +224,35 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const value = useMemo<CalendarContextValue>(
     () => ({
       config: DEFAULT_CALENDAR_CONFIG,
-      selectedDay: state.selectedDay,
+      selectedWeekStart: state.selectedWeekStart,
+      weekDays,
       blocks: state.blocks,
       isLoading: state.isLoading,
       error: state.error,
-      goToPreviousDay,
-      goToNextDay,
+      goToPreviousWeek,
+      goToNextWeek,
       goToToday,
-      refreshDay,
+      refreshWeek,
       createBlock,
       updateBlock,
       removeBlock,
+      moveBlock,
       clearError,
     }),
     [
-      state,
-      goToPreviousDay,
-      goToNextDay,
+      state.selectedWeekStart,
+      state.blocks,
+      state.isLoading,
+      state.error,
+      weekDays,
+      goToPreviousWeek,
+      goToNextWeek,
       goToToday,
-      refreshDay,
+      refreshWeek,
       createBlock,
       updateBlock,
       removeBlock,
+      moveBlock,
       clearError,
     ],
   );

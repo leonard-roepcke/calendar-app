@@ -4,7 +4,7 @@ import type {
   TimeBlockId,
   UpdateTimeBlockInput,
 } from '../../domain/models/timeBlock';
-import { isSameDay } from '../../shared/utils/dateTime';
+import { isSameDay, startOfDay } from '../../shared/utils/dateTime';
 import type { TimeBlockRepository } from './TimeBlockRepository';
 
 function createId(): TimeBlockId {
@@ -27,6 +27,16 @@ export class InMemoryTimeBlockRepository implements TimeBlockRepository {
   async getByDay(day: Date): Promise<TimeBlock[]> {
     const all = await this.getAll();
     return all.filter((block) => isSameDay(block.startAt, day));
+  }
+
+  async getByDateRange(start: Date, end: Date): Promise<TimeBlock[]> {
+    const rangeStart = startOfDay(start).getTime();
+    const rangeEnd = startOfDay(end).getTime();
+    const all = await this.getAll();
+    return all.filter((block) => {
+      const blockDay = startOfDay(block.startAt).getTime();
+      return blockDay >= rangeStart && blockDay < rangeEnd;
+    });
   }
 
   async create(input: CreateTimeBlockInput): Promise<TimeBlock> {

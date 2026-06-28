@@ -14,6 +14,12 @@ export class TimeBlockService {
     return this.repository.getByDay(day);
   }
 
+  async listWeek(weekStart: Date): Promise<TimeBlock[]> {
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 7);
+    return this.repository.getByDateRange(weekStart, weekEnd);
+  }
+
   async create(input: CreateTimeBlockInput): Promise<TimeBlock> {
     const error = validateTimeRange(input.startAt, input.endAt);
     if (error) {

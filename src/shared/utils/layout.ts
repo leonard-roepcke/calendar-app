@@ -5,6 +5,10 @@ import {
   durationMinutes,
   minutesSinceStartOfDay,
   snapMinutesToInterval,
+  startOfDay,
+  daysBetween,
+  addDays,
+  dateFromDayMinutes,
 } from './dateTime';
 
 export interface BlockLayout {
@@ -13,6 +17,7 @@ export interface BlockLayout {
   height: number;
   left: number;
   width: number;
+  dayIndex?: number;
 }
 
 export interface TimelineMetrics {
@@ -79,6 +84,73 @@ export function layoutTimeBlocks(
       width: contentWidth - gutter * 2,
     };
   });
+}
+
+export function layoutTimeBlocksForWeek(
+  blocks: TimeBlock[],
+  weekStart: Date,
+  config: CalendarConfig,
+  gridWidth: number,
+  columnCount = 7,
+  gutter = 2,
+): BlockLayout[] {
+  const metrics = getTimelineMetrics(config);
+  const columnWidth = gridWidth / columnCount;
+
+  const layouts: BlockLayout[] = [];
+
+  for (const block of blocks) {
+    const dayIndex = daysBetween(weekStart, block.startAt);
+    if (dayIndex < 0 || dayIndex >= columnCount) {
+      continue;
+    }
+
+    const startMinutes = minutesSinceStartOfDay(block.startAt);
+    const endMinutes = minutesSinceStartOfDay(block.endAt);
+    const top = minutesToY(startMinutes, config, metrics);
+    const height = Math.max(
+      minutesToY(endMinutes, config, metrics) - top,
+      config.hourHeight / 4,
+    );
+
+    layouts.push({
+      blockId: block.id,
+      top,
+      height,
+      left: dayIndex * columnWidth + gutter,
+      width: columnWidth - gutter * 2,
+      dayIndex,
+    });
+  }
+
+  return layouts;
+}
+
+export function computeBlockMove(
+  block: TimeBlock,
+  weekStart: Date,
+  deltaDays: number,
+  deltaMinutes: number,
+  config: CalendarConfig,
+): { startAt: Date; endAt: Date } | null {
+  const duration = durationMinutes(block.startAt, block.endAt);
+  const currentDayIndex = daysBetween(weekStart, block.startAt);
+  const newDayIndex = Math.min(Math.max(currentDayIndex + deltaDays, 0), 6);
+  const newStartMinutes = clampMinutes(
+    minutesSinceStartOfDay(block.startAt) + deltaMinutes,
+    config.dayStartHour * 60,
+    config.dayEndHour * 60 - duration,
+  );
+
+  const newDay = addDays(startOfDay(block.startAt), newDayIndex - currentDayIndex);
+  const startAt = dateFromDayMinutes(newDay, newStartMinutes);
+  const endAt = dateFromDayMinutes(newDay, newStartMinutes + duration);
+
+  if (validateTimeRange(startAt, endAt)) {
+    return null;
+  }
+
+  return { startAt, endAt };
 }
 
 export function validateTimeRange(startAt: Date, endAt: Date): string | null {

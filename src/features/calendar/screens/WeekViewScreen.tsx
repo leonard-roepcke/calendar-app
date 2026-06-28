@@ -9,37 +9,44 @@ import {
 } from 'react-native';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { colors } from '../../../shared/theme/colors';
-import { addDays, dateFromDayMinutes, startOfDay } from '../../../shared/utils/dateTime';
-import { DayHeader } from '../components/DayHeader';
-import { DayTimeline } from '../components/DayTimeline';
+import { addDays, dateFromDayMinutes } from '../../../shared/utils/dateTime';
 import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
 } from '../components/TimeBlockFormModal';
+import { WeekDayColumnHeader } from '../components/WeekDayColumnHeader';
+import { WeekHeader } from '../components/WeekHeader';
+import { WeekTimeline } from '../components/WeekTimeline';
 import { useCalendar } from '../store/CalendarProvider';
 
-export function DayViewScreen() {
+export function WeekViewScreen() {
   const {
     config,
+    selectedWeekStart,
+    weekDays,
     blocks,
     isLoading,
     error,
+    goToPreviousWeek,
+    goToNextWeek,
     goToToday,
     createBlock,
     updateBlock,
     removeBlock,
+    moveBlock,
     clearError,
   } = useCalendar();
 
-  const [selectedDay, setSelectedDay] = useState(startOfDay(new Date()));
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [editingBlock, setEditingBlock] = useState<TimeBlock | null>(null);
+  const [formDay, setFormDay] = useState<Date>(weekDays[0] ?? selectedWeekStart);
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
 
-  const openCreateForm = (startMinutes?: number) => {
+  const openCreateForm = (dayIndex?: number, startMinutes?: number) => {
     setEditingBlock(null);
+    setFormDay(weekDays[dayIndex ?? 0] ?? selectedWeekStart);
     setPrefilledStartMinutes(startMinutes ?? null);
     setIsFormVisible(true);
   };
@@ -50,6 +57,7 @@ export function DayViewScreen() {
       return;
     }
     setEditingBlock(block);
+    setFormDay(block.startAt);
     setPrefilledStartMinutes(null);
     setIsFormVisible(true);
   };
@@ -61,8 +69,8 @@ export function DayViewScreen() {
   };
 
   const handleSubmit = async (values: TimeBlockFormValues) => {
-    const startAt = dateFromDayMinutes(selectedDay, values.startMinutes);
-    const endAt = dateFromDayMinutes(selectedDay, values.endMinutes);
+    const startAt = dateFromDayMinutes(formDay, values.startMinutes);
+    const endAt = dateFromDayMinutes(formDay, values.endMinutes);
 
     if (editingBlock) {
       await updateBlock({
@@ -95,15 +103,13 @@ export function DayViewScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <DayHeader
-        selectedDay={selectedDay}
-        onPrevious={() => setSelectedDay((day) => addDays(day, -1))}
-        onNext={() => setSelectedDay((day) => addDays(day, 1))}
-        onToday={() => {
-          setSelectedDay(startOfDay(new Date()));
-          goToToday();
-        }}
+      <WeekHeader
+        weekStart={selectedWeekStart}
+        onPrevious={goToPreviousWeek}
+        onNext={goToNextWeek}
+        onToday={goToToday}
       />
+      <WeekDayColumnHeader weekDays={weekDays} />
 
       {error ? (
         <Pressable style={styles.errorBanner} onPress={clearError}>
@@ -116,11 +122,13 @@ export function DayViewScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <DayTimeline
+        <WeekTimeline
           config={config}
-          selectedDay={selectedDay}
-          onSlotPress={(minutes) => openCreateForm(minutes)}
+          onSlotPress={(dayIndex, minutes) => openCreateForm(dayIndex, minutes)}
           onBlockPress={openEditForm}
+          onBlockMove={(blockId, deltaDays, deltaMinutes) => {
+            void moveBlock(blockId, deltaDays, deltaMinutes);
+          }}
         />
       )}
 
@@ -130,7 +138,7 @@ export function DayViewScreen() {
 
       <TimeBlockFormModal
         visible={isFormVisible}
-        selectedDay={selectedDay}
+        selectedDay={formDay}
         initialBlock={editingBlock}
         prefilledStartMinutes={prefilledStartMinutes}
         onClose={closeForm}
