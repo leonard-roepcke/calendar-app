@@ -1,14 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  Modal,
-  Pressable,
+  Gesture,
+  GestureDetector,
+  GestureHandlerRootView,
   ScrollView,
-  StyleSheet,
-  Text,
   TextInput,
-  View,
-} from 'react-native';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+} from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
@@ -84,7 +82,7 @@ export function TimeBlockFormModal({
   onClose,
   onSubmit,
   onDelete,
-}: TimeBlockFormModalProps) {
+}: TimeBlockFormModalProps {
   const isEditing = Boolean(initialBlock);
   const sheetOffset = useSharedValue(0);
 
@@ -114,19 +112,28 @@ export function TimeBlockFormModal({
     onClose();
   }, [onClose, onSubmit, values]);
 
-  const swipeGesture = Gesture.Pan()
-    .onUpdate((event) => {
-      if (event.translationY > 0) {
-        sheetOffset.value = event.translationY;
-      }
-    })
-    .onEnd((event) => {
-      if (event.translationY > 100 || event.velocityY > 800) {
-        runOnJS(dismiss)();
-        return;
-      }
-      sheetOffset.value = withSpring(0);
-    });
+  const contentScrollGesture = useMemo(() => Gesture.Native(), []);
+
+  const dismissPan = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetY(8)
+        .failOffsetX([-24, 24])
+        .simultaneousWithExternalGesture(contentScrollGesture)
+        .onUpdate((event) => {
+          if (event.translationY > 0) {
+            sheetOffset.value = event.translationY;
+          }
+        })
+        .onEnd((event) => {
+          if (event.translationY > 100 || event.velocityY > 800) {
+            runOnJS(dismiss)();
+            return;
+          }
+          sheetOffset.value = withSpring(0);
+        }),
+    [contentScrollGesture, dismiss, sheetOffset],
+  );
 
   const sheetStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: sheetOffset.value }],
@@ -139,120 +146,139 @@ export function TimeBlockFormModal({
       transparent
       onRequestClose={() => void dismiss()}
     >
-      <View style={styles.backdrop}>
-        <Pressable style={styles.backdropPress} onPress={() => void dismiss()} />
-        <GestureDetector gesture={swipeGesture}>
-          <Animated.View style={[styles.sheet, sheetStyle]}>
-            <View style={styles.dragHandle} />
-            <Text style={styles.heading}>
-              {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
-            </Text>
-            <Text style={styles.hint}>
-              Nach unten wischen oder außerhalb tippen zum Schließen
-            </Text>
+      <GestureHandlerRootView style={styles.root}>
+        <View style={styles.backdrop}>
+          <Pressable style={styles.backdropPress} onPress={() => void dismiss()} />
+          <GestureDetector gesture={dismissPan}>
+            <Animated.View style={[styles.sheet, sheetStyle]}>
+              <View style={styles.dragHandle} />
+              <Text style={styles.heading}>
+                {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
+              </Text>
+              <Text style={styles.hint}>
+                Nach unten wischen oder außerhalb tippen zum Schließen
+              </Text>
 
-            <Text style={styles.label}>Titel</Text>
-            <TextInput
-              value={values.title}
-              onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-              placeholder="z. B. Deep Work"
-              style={styles.input}
-            />
+              <Text style={styles.label}>Titel</Text>
+              <TextInput
+                value={values.title}
+                onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+                placeholder="z. B. Deep Work"
+                style={styles.input}
+              />
 
-            <Text style={styles.label}>Start</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {START_OPTIONS.map((minutes) => {
-                const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
-                const selected = values.startMinutes === minutes;
-                return (
-                  <Pressable
-                    key={minutes}
-                    onPress={() =>
-                      setValues((current) => ({
-                        ...current,
-                        startMinutes: minutes,
-                        endMinutes: Math.max(current.endMinutes, minutes + 15),
-                      }))
-                    }
-                    style={[styles.chip, selected && styles.chipSelected]}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                      {label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+              <Text style={styles.label}>Start</Text>
+              <GestureDetector gesture={contentScrollGesture}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {START_OPTIONS.map((minutes) => {
+                    const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
+                    const selected = values.startMinutes === minutes;
+                    return (
+                      <Pressable
+                        key={minutes}
+                        onPress={() =>
+                          setValues((current) => ({
+                            ...current,
+                            startMinutes: minutes,
+                            endMinutes: Math.max(current.endMinutes, minutes + 15),
+                          }))
+                        }
+                        style={[styles.chip, selected && styles.chipSelected]}
+                      >
+                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                          {label}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </GestureDetector>
 
-            <Text style={styles.label}>Dauer</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {DURATION_OPTIONS.map((duration) => {
-                const selected = values.endMinutes - values.startMinutes === duration;
-                return (
-                  <Pressable
-                    key={duration}
-                    onPress={() =>
-                      setValues((current) => ({
-                        ...current,
-                        endMinutes: current.startMinutes + duration,
-                      }))
-                    }
-                    style={[styles.chip, selected && styles.chipSelected]}
-                  >
-                    <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                      {duration} Min
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+              <Text style={styles.label}>Dauer</Text>
+              <GestureDetector gesture={contentScrollGesture}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.chipRow}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  {DURATION_OPTIONS.map((duration) => {
+                    const selected = values.endMinutes - values.startMinutes === duration;
+                    return (
+                      <Pressable
+                        key={duration}
+                        onPress={() =>
+                          setValues((current) => ({
+                            ...current,
+                            endMinutes: current.startMinutes + duration,
+                          }))
+                        }
+                        style={[styles.chip, selected && styles.chipSelected]}
+                      >
+                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
+                          {duration} Min
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              </GestureDetector>
 
-            <Text style={styles.label}>Farbe</Text>
-            <View style={styles.colorRow}>
-              {blockColorOptions.map((color) => {
-                const selected = values.color === color;
-                return (
-                  <Pressable
-                    key={color}
-                    onPress={() => setValues((current) => ({ ...current, color }))}
-                    style={[
-                      styles.colorSwatch,
-                      { backgroundColor: color },
-                      selected && styles.colorSwatchSelected,
-                    ]}
-                  />
-                );
-              })}
-            </View>
+              <Text style={styles.label}>Farbe</Text>
+              <View style={styles.colorRow}>
+                {blockColorOptions.map((color) => {
+                  const selected = values.color === color;
+                  return (
+                    <Pressable
+                      key={color}
+                      onPress={() => setValues((current) => ({ ...current, color }))}
+                      style={[
+                        styles.colorSwatch,
+                        { backgroundColor: color },
+                        selected && styles.colorSwatchSelected,
+                      ]}
+                    />
+                  );
+                })}
+              </View>
 
-            <Text style={styles.label}>Notizen</Text>
-            <TextInput
-              value={values.notes}
-              onChangeText={(notes) => setValues((current) => ({ ...current, notes }))}
-              placeholder="Optional"
-              style={[styles.input, styles.notesInput]}
-              multiline
-            />
+              <Text style={styles.label}>Notizen</Text>
+              <TextInput
+                value={values.notes}
+                onChangeText={(notes) => setValues((current) => ({ ...current, notes }))}
+                placeholder="Optional"
+                style={[styles.input, styles.notesInput]}
+                multiline
+              />
 
-            {isEditing && onDelete ? (
-              <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
-                <Text style={styles.deleteText}>Löschen</Text>
-              </Pressable>
-            ) : null}
-          </Animated.View>
-        </GestureDetector>
-      </View>
+              {isEditing && onDelete ? (
+                <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
+                  <Text style={styles.deleteText}>Löschen</Text>
+                </Pressable>
+              ) : null}
+            </Animated.View>
+          </GestureDetector>
+        </View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   backdrop: {
     flex: 1,
     justifyContent: 'flex-end',
   },
   backdropPress: {
-    ...StyleSheet.absoluteFill,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(15, 23, 42, 0.35)',
   },
   sheet: {

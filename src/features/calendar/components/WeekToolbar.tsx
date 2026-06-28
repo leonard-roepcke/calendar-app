@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../../shared/theme/colors';
 import {
   TIMELINE_HORIZONTAL_PADDING,
@@ -7,20 +7,16 @@ import {
 import {
   formatDayNumber,
   formatWeekdayShort,
-  isDateInWeek,
   isSameDay,
   startOfDay,
 } from '../../../shared/utils/dateTime';
 
 interface WeekToolbarProps {
   weekDays: Date[];
-  weekStart: Date;
-  onToday: () => void;
 }
 
-export function WeekToolbar({ weekDays, weekStart, onToday }: WeekToolbarProps) {
+export function WeekToolbar({ weekDays }: WeekToolbarProps) {
   const today = startOfDay(new Date());
-  const isCurrentWeek = isDateInWeek(new Date(), weekStart);
 
   return (
     <View style={styles.container}>
@@ -42,11 +38,6 @@ export function WeekToolbar({ weekDays, weekStart, onToday }: WeekToolbarProps) 
           );
         })}
       </View>
-      {!isCurrentWeek ? (
-        <Pressable onPress={onToday} style={styles.todayLinkWrap}>
-          <Text style={styles.todayLink}>Diese Woche</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -97,14 +88,5 @@ const styles = StyleSheet.create({
   },
   todayDayNumber: {
     color: colors.textInverse,
-  },
-  todayLinkWrap: {
-    alignSelf: 'center',
-    marginTop: 4,
-  },
-  todayLink: {
-    fontSize: 12,
-    color: colors.primary,
-    fontWeight: '500',
   },
 });

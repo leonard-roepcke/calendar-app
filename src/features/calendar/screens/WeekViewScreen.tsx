@@ -28,7 +28,6 @@ export function WeekViewScreen() {
     error,
     goToPreviousWeek,
     goToNextWeek,
-    goToToday,
     createBlock,
     updateBlock,
     removeBlock,
@@ -106,11 +105,7 @@ export function WeekViewScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <WeekToolbar
-        weekDays={weekDays}
-        weekStart={selectedWeekStart}
-        onToday={goToToday}
-      />
+      <WeekToolbar weekDays={weekDays} />
 
       {error ? (
         <Pressable style={styles.errorBanner} onPress={clearError}>

@@ -43,7 +43,10 @@ function WeekHourGrid({
   const metrics = getTimelineMetrics(config);
 
   return (
-    <View style={[styles.weekGrid, { height: metrics.totalHeight }]}>
+    <View
+      pointerEvents="none"
+      style={[styles.weekGrid, { height: metrics.totalHeight }]}
+    >
       <HourGrid config={config} />
       {Array.from({ length: columnCount - 1 }, (_, index) => (
         <View
@@ -188,6 +191,7 @@ export function WeekTimeline({
     () =>
       Gesture.Pan()
         .activateAfterLongPress(500)
+        .failOffsetY([-10, 10])
         .minDistance(12)
         .simultaneousWithExternalGesture(scrollNativeGesture)
         .onStart((event) => {
@@ -246,39 +250,46 @@ export function WeekTimeline({
     <GestureDetector gesture={scrollNativeGesture}>
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING }}
+        contentContainerStyle={{
+          paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING,
+          minHeight: metrics.totalHeight + TIMELINE_SCROLL_BOTTOM_PADDING,
+        }}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!scrollLocked}
+        nestedScrollEnabled
       >
-      <View style={styles.row}>
-        <TimeColumn config={config} />
-        <View style={styles.gridArea} onLayout={handleLayout}>
-          <WeekHourGrid config={config} columnCount={7} />
+        <View style={[styles.row, { minHeight: metrics.totalHeight }]}>
+          <TimeColumn config={config} />
           <GestureDetector gesture={gridGesture}>
-            <View style={[styles.touchLayer, { height: metrics.totalHeight }]} />
+            <View
+              style={[styles.gridArea, { height: metrics.totalHeight }]}
+              onLayout={handleLayout}
+              collapsable={false}
+            >
+              <WeekHourGrid config={config} columnCount={7} />
+              {showCreationPreview && creationDraft && columnWidth > 0 ? (
+                <CreationPreview
+                  draft={creationDraft}
+                  config={config}
+                  columnWidth={columnWidth}
+                />
+              ) : null}
+              {gridWidth > 0 ? (
+                <DraggableTimeBlockLayer
+                  blocks={blocks}
+                  layouts={layouts}
+                  config={config}
+                  columnWidth={columnWidth}
+                  onBlockPress={onBlockPress}
+                  onBlockMove={onBlockMove}
+                  onBlockResizeStart={onBlockResizeStart}
+                  onBlockResizeEnd={onBlockResizeEnd}
+                  onInteractionChange={handleBlockInteraction}
+                />
+              ) : null}
+            </View>
           </GestureDetector>
-          {showCreationPreview && creationDraft && columnWidth > 0 ? (
-            <CreationPreview
-              draft={creationDraft}
-              config={config}
-              columnWidth={columnWidth}
-            />
-          ) : null}
-          {gridWidth > 0 ? (
-            <DraggableTimeBlockLayer
-              blocks={blocks}
-              layouts={layouts}
-              config={config}
-              columnWidth={columnWidth}
-              onBlockPress={onBlockPress}
-              onBlockMove={onBlockMove}
-              onBlockResizeStart={onBlockResizeStart}
-              onBlockResizeEnd={onBlockResizeEnd}
-              onInteractionChange={handleBlockInteraction}
-            />
-          ) : null}
         </View>
-      </View>
       </ScrollView>
     </GestureDetector>
   );
@@ -309,13 +320,6 @@ const styles = StyleSheet.create({
     top: 0,
     width: StyleSheet.hairlineWidth,
     backgroundColor: colors.gridLine,
-  },
-  touchLayer: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    zIndex: 0,
   },
   creationPreview: {
     position: 'absolute',
