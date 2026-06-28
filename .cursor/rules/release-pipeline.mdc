@@ -1,0 +1,15 @@
+---
+description: Automatischer APK-Build und GitHub-Release nach Agent-Arbeit
+alwaysApply: true
+---
+
+# Release-Pipeline
+
+Nach jeder Umsetzung von Anforderungen wird automatisch (via Cursor `stop`-Hook) ausgeführt:
+
+1. `scripts/build-and-release.sh` baut die Android-APK
+2. Die APK landet in `releases/`
+3. Es wird ein GitHub Release mit der APK erstellt
+4. Alle Änderungen werden nach GitHub gepusht
+
+Manuell ausführen: `npm run release`
