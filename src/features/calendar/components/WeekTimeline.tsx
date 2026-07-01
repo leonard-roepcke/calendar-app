@@ -24,8 +24,7 @@ export interface SlotCreationDraft {
 
 interface WeekTimelineProps {
   config: CalendarConfig;
-  onPreviousWeek: () => void;
-  onNextWeek: () => void;
+  scrollNativeGesture: ReturnType<typeof Gesture.Native>;
   onSlotCreate: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: string, deltaDays: number, deltaMinutes: number) => void;
@@ -96,8 +95,7 @@ function CreationPreview({
 
 export function WeekTimeline({
   config,
-  onPreviousWeek,
-  onNextWeek,
+  scrollNativeGesture,
   onSlotCreate,
   onBlockPress,
   onBlockMove,
@@ -185,8 +183,6 @@ export function WeekTimeline({
     setCreationDraft(null);
   }, []);
 
-  const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
-
   const createGesture = useMemo(
     () =>
       Gesture.Pan()
@@ -217,26 +213,7 @@ export function WeekTimeline({
     ],
   );
 
-  const weekSwipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-28, 28])
-        .failOffsetY([-18, 18])
-        .simultaneousWithExternalGesture(scrollNativeGesture)
-        .onEnd((event) => {
-          if (event.translationX < -70) {
-            runOnJS(onNextWeek)();
-          } else if (event.translationX > 70) {
-            runOnJS(onPreviousWeek)();
-          }
-        }),
-    [onNextWeek, onPreviousWeek, scrollNativeGesture],
-  );
-
-  const gridGesture = useMemo(
-    () => Gesture.Simultaneous(createGesture, weekSwipeGesture),
-    [createGesture, weekSwipeGesture],
-  );
+  const gridGesture = createGesture;
 
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);

@@ -1,18 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  Gesture,
-  GestureDetector,
   GestureHandlerRootView,
   ScrollView,
   TextInput,
 } from 'react-native-gesture-handler';
-import Animated, {
-  runOnJS,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
 import {
@@ -39,10 +31,11 @@ interface TimeBlockFormModalProps {
   onDelete?: () => Promise<void>;
 }
 
+type ExpandedField = 'start' | 'end' | 'color' | null;
+
 const START_OPTIONS = Array.from({ length: 24 }, (_, hour) => hour * 60).filter(
   (minutes) => minutes >= 6 * 60 && minutes <= 20 * 60,
 );
-const DURATION_OPTIONS = [30, 45, 60, 90, 120];
 
 function blockToFormValues(block: TimeBlock): TimeBlockFormValues {
   return {
@@ -74,6 +67,18 @@ function defaultFormValues(
   };
 }
 
+function TrashIcon() {
+  return (
+    <View style={styles.trashIcon}>
+      <View style={styles.trashLid} />
+      <View style={styles.trashBody}>
+        <View style={styles.trashLine} />
+        <View style={styles.trashLine} />
+      </View>
+    </View>
+  );
+}
+
 export function TimeBlockFormModal({
   visible,
   selectedDay,
@@ -84,26 +89,34 @@ export function TimeBlockFormModal({
   onDelete,
 }: TimeBlockFormModalProps) {
   const isEditing = Boolean(initialBlock);
-  const sheetOffset = useSharedValue(0);
 
   const [values, setValues] = useState<TimeBlockFormValues>(() =>
     initialBlock
       ? blockToFormValues(initialBlock)
       : defaultFormValues(selectedDay, prefilledStartMinutes),
   );
+  const [expandedField, setExpandedField] = useState<ExpandedField>(null);
 
   useEffect(() => {
     if (visible) {
-      sheetOffset.value = 0;
       setValues(
         initialBlock
           ? blockToFormValues(initialBlock)
           : defaultFormValues(selectedDay, prefilledStartMinutes),
       );
+      setExpandedField(null);
     }
-  }, [visible, initialBlock, prefilledStartMinutes, selectedDay, sheetOffset]);
+  }, [visible, initialBlock, prefilledStartMinutes, selectedDay]);
 
-  const dismiss = useCallback(async () => {
+  const endOptions = useMemo(() => {
+    const options: number[] = [];
+    for (let minutes = values.startMinutes + 15; minutes <= 22 * 60; minutes += 15) {
+      options.push(minutes);
+    }
+    return options;
+  }, [values.startMinutes]);
+
+  const saveAndClose = useCallback(async () => {
     const payload = {
       ...values,
       title: values.title.trim() || 'Neuer Termin',
@@ -112,67 +125,82 @@ export function TimeBlockFormModal({
     onClose();
   }, [onClose, onSubmit, values]);
 
-  const contentScrollGesture = useMemo(() => Gesture.Native(), []);
+  const toggleField = (field: ExpandedField) => {
+    setExpandedField((current) => (current === field ? null : field));
+  };
 
-  const dismissPan = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetY(8)
-        .failOffsetX([-24, 24])
-        .simultaneousWithExternalGesture(contentScrollGesture)
-        .onUpdate((event) => {
-          if (event.translationY > 0) {
-            sheetOffset.value = event.translationY;
-          }
-        })
-        .onEnd((event) => {
-          if (event.translationY > 100 || event.velocityY > 800) {
-            runOnJS(dismiss)();
-            return;
-          }
-          sheetOffset.value = withSpring(0);
-        }),
-    [contentScrollGesture, dismiss, sheetOffset],
-  );
-
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: sheetOffset.value }],
-  }));
+  const startLabel = formatTime(dateFromDayMinutes(selectedDay, values.startMinutes));
+  const endLabel = formatTime(dateFromDayMinutes(selectedDay, values.endMinutes));
 
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType="fade"
       transparent
-      onRequestClose={() => void dismiss()}
+      onRequestClose={() => void saveAndClose()}
     >
       <GestureHandlerRootView style={styles.root}>
         <View style={styles.backdrop}>
-          <Pressable style={styles.backdropPress} onPress={() => void dismiss()} />
-          <GestureDetector gesture={dismissPan}>
-            <Animated.View style={[styles.sheet, sheetStyle]}>
-              <View style={styles.dragHandle} />
-              <Text style={styles.heading}>
-                {isEditing ? 'Time-Block bearbeiten' : 'Neuer Time-Block'}
-              </Text>
-              <Text style={styles.hint}>
-                Nach unten wischen oder außerhalb tippen zum Schließen
-              </Text>
+          <Pressable
+            style={styles.backdropPress}
+            onPress={() => void saveAndClose()}
+            accessibilityRole="button"
+            accessibilityLabel="Schließen"
+          />
+          <View style={styles.card} pointerEvents="box-none">
+            <View style={styles.cardInner}>
+              <View style={styles.headerRow}>
+                <TextInput
+                  value={values.title}
+                  onChangeText={(title) => setValues((current) => ({ ...current, title }))}
+                  placeholder={isEditing ? 'Titel' : 'Neuer Termin'}
+                  placeholderTextColor={colors.textSecondary}
+                  style={styles.titleInput}
+                />
+                {isEditing && onDelete ? (
+                  <Pressable
+                    onPress={() => void onDelete()}
+                    style={styles.deleteButton}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel="Löschen"
+                  >
+                    <TrashIcon />
+                  </Pressable>
+                ) : null}
+              </View>
 
-              <Text style={styles.label}>Titel</Text>
-              <TextInput
-                value={values.title}
-                onChangeText={(title) => setValues((current) => ({ ...current, title }))}
-                placeholder="z. B. Deep Work"
-                style={styles.input}
-              />
+              <View style={styles.timeRow}>
+                <Pressable
+                  onPress={() => toggleField('start')}
+                  style={[
+                    styles.timePill,
+                    expandedField === 'start' && styles.timePillActive,
+                  ]}
+                >
+                  <Text style={styles.timePillLabel}>Start</Text>
+                  <Text style={styles.timePillValue}>{startLabel}</Text>
+                </Pressable>
 
-              <Text style={styles.label}>Start</Text>
-              <GestureDetector gesture={contentScrollGesture}>
+                <Text style={styles.timeSeparator}>–</Text>
+
+                <Pressable
+                  onPress={() => toggleField('end')}
+                  style={[
+                    styles.timePill,
+                    expandedField === 'end' && styles.timePillActive,
+                  ]}
+                >
+                  <Text style={styles.timePillLabel}>Ende</Text>
+                  <Text style={styles.timePillValue}>{endLabel}</Text>
+                </Pressable>
+              </View>
+
+              {expandedField === 'start' ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  style={styles.chipRow}
+                  style={styles.pickerRow}
                   keyboardShouldPersistTaps="handled"
                 >
                   {START_OPTIONS.map((minutes) => {
@@ -197,72 +225,72 @@ export function TimeBlockFormModal({
                     );
                   })}
                 </ScrollView>
-              </GestureDetector>
+              ) : null}
 
-              <Text style={styles.label}>Dauer</Text>
-              <GestureDetector gesture={contentScrollGesture}>
+              {expandedField === 'end' ? (
                 <ScrollView
                   horizontal
                   showsHorizontalScrollIndicator={false}
-                  style={styles.chipRow}
+                  style={styles.pickerRow}
                   keyboardShouldPersistTaps="handled"
                 >
-                  {DURATION_OPTIONS.map((duration) => {
-                    const selected = values.endMinutes - values.startMinutes === duration;
+                  {endOptions.map((minutes) => {
+                    const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
+                    const selected = values.endMinutes === minutes;
                     return (
                       <Pressable
-                        key={duration}
+                        key={minutes}
                         onPress={() =>
                           setValues((current) => ({
                             ...current,
-                            endMinutes: current.startMinutes + duration,
+                            endMinutes: minutes,
                           }))
                         }
                         style={[styles.chip, selected && styles.chipSelected]}
                       >
                         <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                          {duration} Min
+                          {label}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </ScrollView>
-              </GestureDetector>
-
-              <Text style={styles.label}>Farbe</Text>
-              <View style={styles.colorRow}>
-                {blockColorOptions.map((color) => {
-                  const selected = values.color === color;
-                  return (
-                    <Pressable
-                      key={color}
-                      onPress={() => setValues((current) => ({ ...current, color }))}
-                      style={[
-                        styles.colorSwatch,
-                        { backgroundColor: color },
-                        selected && styles.colorSwatchSelected,
-                      ]}
-                    />
-                  );
-                })}
-              </View>
-
-              <Text style={styles.label}>Notizen</Text>
-              <TextInput
-                value={values.notes}
-                onChangeText={(notes) => setValues((current) => ({ ...current, notes }))}
-                placeholder="Optional"
-                style={[styles.input, styles.notesInput]}
-                multiline
-              />
-
-              {isEditing && onDelete ? (
-                <Pressable onPress={() => void onDelete()} style={styles.deleteButton}>
-                  <Text style={styles.deleteText}>Löschen</Text>
-                </Pressable>
               ) : null}
-            </Animated.View>
-          </GestureDetector>
+
+              <Pressable
+                onPress={() => toggleField('color')}
+                style={styles.colorTrigger}
+              >
+                <View
+                  style={[
+                    styles.colorPreview,
+                    { backgroundColor: values.color },
+                    expandedField === 'color' && styles.colorPreviewActive,
+                  ]}
+                />
+                <Text style={styles.colorTriggerText}>Farbe</Text>
+              </Pressable>
+
+              {expandedField === 'color' ? (
+                <View style={styles.colorRow}>
+                  {blockColorOptions.map((color) => {
+                    const selected = values.color === color;
+                    return (
+                      <Pressable
+                        key={color}
+                        onPress={() => setValues((current) => ({ ...current, color }))}
+                        style={[
+                          styles.colorSwatch,
+                          { backgroundColor: color },
+                          selected && styles.colorSwatchSelected,
+                        ]}
+                      />
+                    );
+                  })}
+                </View>
+              ) : null}
+            </View>
+          </View>
         </View>
       </GestureHandlerRootView>
     </Modal>
@@ -275,62 +303,124 @@ const styles = StyleSheet.create({
   },
   backdrop: {
     flex: 1,
-    justifyContent: 'flex-end',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 24,
   },
   backdropPress: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(15, 23, 42, 0.35)',
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(15, 23, 42, 0.4)',
   },
-  sheet: {
+  card: {
+    width: '100%',
+    maxWidth: 340,
+    zIndex: 1,
+  },
+  cardInner: {
     backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
     padding: 20,
-    paddingTop: 10,
+    gap: 14,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
-    maxHeight: '88%',
   },
-  dragHandle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: colors.border,
-    marginBottom: 8,
-  },
-  heading: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: 2,
-  },
-  hint: {
-    fontSize: 12,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  label: {
-    fontSize: 13,
+  titleInput: {
+    flex: 1,
+    fontSize: 17,
     fontWeight: '600',
-    color: colors.textSecondary,
-    marginTop: 4,
+    color: colors.textPrimary,
+    paddingVertical: 2,
   },
-  input: {
+  deleteButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEE2E2',
+  },
+  trashIcon: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+  },
+  trashLid: {
+    width: 14,
+    height: 3,
+    borderRadius: 1,
+    backgroundColor: colors.danger,
+    marginBottom: 1,
+  },
+  trashBody: {
+    width: 11,
+    height: 10,
+    borderWidth: 1.5,
+    borderTopWidth: 0,
+    borderColor: colors.danger,
+    borderBottomLeftRadius: 2,
+    borderBottomRightRadius: 2,
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    alignItems: 'center',
+    paddingTop: 2,
+  },
+  trashLine: {
+    width: 1,
+    height: 5,
+    backgroundColor: colors.danger,
+    borderRadius: 1,
+  },
+  timeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timePill: {
+    flex: 1,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: colors.textPrimary,
     backgroundColor: colors.surface,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    gap: 2,
   },
-  notesInput: {
-    minHeight: 72,
-    textAlignVertical: 'top',
+  timePillActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryMuted,
   },
-  chipRow: {
+  timePillLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
+  timePillValue: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
+  timeSeparator: {
+    fontSize: 20,
+    color: colors.textSecondary,
+    fontWeight: '300',
+  },
+  pickerRow: {
     flexGrow: 0,
+    marginTop: -4,
   },
   chip: {
     borderWidth: 1,
@@ -353,27 +443,42 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  colorRow: {
+  colorTrigger: {
     flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    marginVertical: 4,
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
   },
-  colorSwatch: {
+  colorPreview: {
     width: 28,
     height: 28,
     borderRadius: 14,
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  colorSwatchSelected: {
+  colorPreviewActive: {
     borderColor: colors.primary,
   },
-  deleteButton: {
-    paddingVertical: 12,
-    marginTop: 8,
+  colorTriggerText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    fontWeight: '500',
   },
-  deleteText: {
-    color: colors.danger,
-    fontWeight: '600',
+  colorRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: -6,
+  },
+  colorSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  colorSwatchSelected: {
+    borderColor: colors.primary,
   },
 });

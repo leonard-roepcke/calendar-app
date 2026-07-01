@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -6,6 +6,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Gesture } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
@@ -14,6 +15,7 @@ import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
 } from '../components/TimeBlockFormModal';
+import { WeekSwipeContainer } from '../components/WeekSwipeContainer';
 import { WeekTimeline } from '../components/WeekTimeline';
 import { WeekToolbar } from '../components/WeekToolbar';
 import { useCalendar } from '../store/CalendarProvider';
@@ -43,6 +45,7 @@ export function WeekViewScreen() {
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
+  const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
 
   const openEditForm = (block: TimeBlock) => {
     setEditingBlock(block);
@@ -105,8 +108,6 @@ export function WeekViewScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <WeekToolbar weekDays={weekDays} />
-
       {error ? (
         <Pressable style={styles.errorBanner} onPress={clearError}>
           <Text style={styles.errorText}>{error}</Text>
@@ -118,24 +119,30 @@ export function WeekViewScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <WeekTimeline
-          config={config}
+        <WeekSwipeContainer
           onPreviousWeek={goToPreviousWeek}
           onNextWeek={goToNextWeek}
-          onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
-            void handleSlotCreate(dayIndex, startMinutes, endMinutes);
-          }}
-          onBlockPress={openEditFormById}
-          onBlockMove={(blockId, deltaDays, deltaMinutes) => {
-            void moveBlock(blockId, deltaDays, deltaMinutes);
-          }}
-          onBlockResizeStart={(blockId, deltaMinutes) => {
-            void resizeBlockStart(blockId, deltaMinutes);
-          }}
-          onBlockResizeEnd={(blockId, deltaMinutes) => {
-            void resizeBlockEnd(blockId, deltaMinutes);
-          }}
-        />
+          scrollNativeGesture={scrollNativeGesture}
+        >
+          <WeekToolbar weekDays={weekDays} />
+          <WeekTimeline
+            config={config}
+            scrollNativeGesture={scrollNativeGesture}
+            onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
+              void handleSlotCreate(dayIndex, startMinutes, endMinutes);
+            }}
+            onBlockPress={openEditFormById}
+            onBlockMove={(blockId, deltaDays, deltaMinutes) => {
+              void moveBlock(blockId, deltaDays, deltaMinutes);
+            }}
+            onBlockResizeStart={(blockId, deltaMinutes) => {
+              void resizeBlockStart(blockId, deltaMinutes);
+            }}
+            onBlockResizeEnd={(blockId, deltaMinutes) => {
+              void resizeBlockEnd(blockId, deltaMinutes);
+            }}
+          />
+        </WeekSwipeContainer>
       )}
 
       <TimeBlockFormModal
