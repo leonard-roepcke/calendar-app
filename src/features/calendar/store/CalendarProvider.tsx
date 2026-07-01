@@ -38,9 +38,13 @@ function isDateInLoadedRange(date: Date, selectedWeekStart: Date): boolean {
   return date.getTime() >= start.getTime() && date.getTime() < end.getTime();
 }
 
+export const MIN_HOUR_HEIGHT = 28;
+export const MAX_HOUR_HEIGHT = 150;
+
 interface CalendarState {
   selectedWeekStart: Date;
   blocks: TimeBlock[];
+  hourHeight: number;
   isLoading: boolean;
   error: string | null;
 }
@@ -50,6 +54,7 @@ type CalendarAction =
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_BLOCKS'; blocks: TimeBlock[] }
   | { type: 'SET_WEEK_START'; weekStart: Date }
+  | { type: 'SET_HOUR_HEIGHT'; hourHeight: number }
   | { type: 'ADD_BLOCK'; block: TimeBlock }
   | { type: 'UPDATE_BLOCK'; block: TimeBlock }
   | { type: 'REMOVE_BLOCK'; id: TimeBlockId };
@@ -64,6 +69,8 @@ function calendarReducer(state: CalendarState, action: CalendarAction): Calendar
       return { ...state, blocks: action.blocks };
     case 'SET_WEEK_START':
       return { ...state, selectedWeekStart: action.weekStart, error: null };
+    case 'SET_HOUR_HEIGHT':
+      return { ...state, hourHeight: action.hourHeight };
     case 'ADD_BLOCK':
       return { ...state, blocks: [...state.blocks, action.block] };
     case 'UPDATE_BLOCK':
@@ -100,6 +107,7 @@ interface CalendarContextValue {
   moveBlock: (id: TimeBlockId, deltaDays: number, deltaMinutes: number) => Promise<void>;
   resizeBlockStart: (id: TimeBlockId, deltaMinutes: number) => Promise<void>;
   resizeBlockEnd: (id: TimeBlockId, deltaMinutes: number) => Promise<void>;
+  setHourHeight: (hourHeight: number) => void;
   clearError: () => void;
 }
 
@@ -112,6 +120,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(calendarReducer, {
     selectedWeekStart: startOfWeek(new Date()),
     blocks: [],
+    hourHeight: DEFAULT_CALENDAR_CONFIG.hourHeight,
     isLoading: true,
     error: null,
   });
@@ -286,9 +295,22 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_ERROR', error: null });
   }, []);
 
+  const setHourHeight = useCallback((hourHeight: number) => {
+    const clamped = Math.min(
+      Math.max(Math.round(hourHeight), MIN_HOUR_HEIGHT),
+      MAX_HOUR_HEIGHT,
+    );
+    dispatch({ type: 'SET_HOUR_HEIGHT', hourHeight: clamped });
+  }, []);
+
+  const config = useMemo(
+    () => ({ ...DEFAULT_CALENDAR_CONFIG, hourHeight: state.hourHeight }),
+    [state.hourHeight],
+  );
+
   const value = useMemo<CalendarContextValue>(
     () => ({
-      config: DEFAULT_CALENDAR_CONFIG,
+      config,
       selectedWeekStart: state.selectedWeekStart,
       weekDays,
       blocks: state.blocks,
@@ -304,9 +326,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       moveBlock,
       resizeBlockStart,
       resizeBlockEnd,
+      setHourHeight,
       clearError,
     }),
     [
+      config,
       state.selectedWeekStart,
       state.blocks,
       state.isLoading,
@@ -322,6 +346,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       moveBlock,
       resizeBlockStart,
       resizeBlockEnd,
+      setHourHeight,
       clearError,
     ],
   );

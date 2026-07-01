@@ -1,13 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from '@react-native-community/datetimepicker';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
 import {
@@ -34,11 +38,7 @@ interface TimeBlockFormModalProps {
   onDelete?: () => Promise<void>;
 }
 
-type ExpandedField = 'start' | 'end' | null;
-
-const START_OPTIONS = Array.from({ length: 24 * 4 }, (_, index) => index * 15).filter(
-  (minutes) => minutes >= 5 * 60 && minutes <= 22 * 60,
-);
+type TimeField = 'start' | 'end';
 
 function blockToFormValues(block: TimeBlock): TimeBlockFormValues {
   return {
@@ -113,7 +113,7 @@ export function TimeBlockFormModal({
       ? blockToFormValues(initialBlock)
       : defaultFormValues(selectedDay, prefilledStartMinutes),
   );
-  const [expandedField, setExpandedField] = useState<ExpandedField>(null);
+  const [iosPicker, setIosPicker] = useState<TimeField | null>(null);
 
   useEffect(() => {
     if (visible) {
@@ -122,17 +122,9 @@ export function TimeBlockFormModal({
           ? blockToFormValues(initialBlock)
           : defaultFormValues(selectedDay, prefilledStartMinutes),
       );
-      setExpandedField(null);
+      setIosPicker(null);
     }
   }, [visible, initialBlock, prefilledStartMinutes, selectedDay]);
-
-  const endOptions = useMemo(() => {
-    const options: number[] = [];
-    for (let minutes = values.startMinutes + 15; minutes <= 23 * 60 + 45; minutes += 15) {
-      options.push(minutes);
-    }
-    return options;
-  }, [values.startMinutes]);
 
   const saveAndClose = useCallback(async () => {
     const payload = {
@@ -143,15 +135,59 @@ export function TimeBlockFormModal({
     onClose();
   }, [onClose, onSubmit, values]);
 
-  const toggleField = (field: Exclude<ExpandedField, null>) => {
-    setExpandedField((current) => (current === field ? null : field));
-  };
+  const applyTime = useCallback((field: TimeField, minutes: number) => {
+    setValues((current) => {
+      if (field === 'start') {
+        return {
+          ...current,
+          startMinutes: minutes,
+          endMinutes: Math.max(current.endMinutes, minutes + 15),
+        };
+      }
+      return {
+        ...current,
+        endMinutes: Math.max(minutes, current.startMinutes + 15),
+      };
+    });
+  }, []);
+
+  const openPicker = useCallback(
+    (field: TimeField) => {
+      const minutes = field === 'start' ? values.startMinutes : values.endMinutes;
+      const base = dateFromDayMinutes(selectedDay, minutes);
+      if (Platform.OS === 'android') {
+        DateTimePickerAndroid.open({
+          value: base,
+          mode: 'time',
+          is24Hour: true,
+          onChange: (event: DateTimePickerEvent, date?: Date) => {
+            if (event.type !== 'set' || !date) {
+              return;
+            }
+            applyTime(field, date.getHours() * 60 + date.getMinutes());
+          },
+        });
+      } else {
+        setIosPicker(field);
+      }
+    },
+    [applyTime, selectedDay, values.endMinutes, values.startMinutes],
+  );
+
+  const handleIosChange = useCallback(
+    (field: TimeField) => (event: DateTimePickerEvent, date?: Date) => {
+      if (event.type === 'dismissed' || !date) {
+        setIosPicker(null);
+        return;
+      }
+      applyTime(field, date.getHours() * 60 + date.getMinutes());
+    },
+    [applyTime],
+  );
 
   const startLabel = formatTime(dateFromDayMinutes(selectedDay, values.startMinutes));
   const endLabel = formatTime(dateFromDayMinutes(selectedDay, values.endMinutes));
   const durationLabel = formatDuration(values.endMinutes - values.startMinutes);
-
-  const pickerOptions = expandedField === 'start' ? START_OPTIONS : endOptions;
 
   return (
     <Modal
@@ -196,10 +232,10 @@ export function TimeBlockFormModal({
 
             <View style={styles.timeRow}>
               <Pressable
-                onPress={() => toggleField('start')}
+                onPress={() => openPicker('start')}
                 style={[
                   styles.timePill,
-                  expandedField === 'start' && styles.timePillActive,
+                  iosPicker === 'start' && styles.timePillActive,
                 ]}
               >
                 <Text style={styles.timePillLabel}>Start</Text>
@@ -211,10 +247,10 @@ export function TimeBlockFormModal({
               </View>
 
               <Pressable
-                onPress={() => toggleField('end')}
+                onPress={() => openPicker('end')}
                 style={[
                   styles.timePill,
-                  expandedField === 'end' && styles.timePillActive,
+                  iosPicker === 'end' && styles.timePillActive,
                 ]}
               >
                 <Text style={styles.timePillLabel}>Ende</Text>
@@ -226,46 +262,17 @@ export function TimeBlockFormModal({
               <Text style={styles.durationLabel}>Dauer: {durationLabel}</Text>
             ) : null}
 
-            {expandedField ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={styles.pickerRow}
-                contentContainerStyle={styles.pickerContent}
-                keyboardShouldPersistTaps="handled"
-              >
-                {pickerOptions.map((minutes) => {
-                  const label = formatTime(dateFromDayMinutes(selectedDay, minutes));
-                  const selected =
-                    expandedField === 'start'
-                      ? values.startMinutes === minutes
-                      : values.endMinutes === minutes;
-                  return (
-                    <Pressable
-                      key={minutes}
-                      onPress={() =>
-                        setValues((current) => {
-                          if (expandedField === 'start') {
-                            return {
-                              ...current,
-                              startMinutes: minutes,
-                              endMinutes: Math.max(current.endMinutes, minutes + 15),
-                            };
-                          }
-                          return { ...current, endMinutes: minutes };
-                        })
-                      }
-                      style={[styles.chip, selected && styles.chipSelected]}
-                    >
-                      <Text
-                        style={[styles.chipText, selected && styles.chipTextSelected]}
-                      >
-                        {label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
+            {iosPicker ? (
+              <DateTimePicker
+                value={dateFromDayMinutes(
+                  selectedDay,
+                  iosPicker === 'start' ? values.startMinutes : values.endMinutes,
+                )}
+                mode="time"
+                display="spinner"
+                is24Hour
+                onChange={handleIosChange(iosPicker)}
+              />
             ) : null}
 
             <View style={styles.divider} />

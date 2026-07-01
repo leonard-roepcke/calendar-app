@@ -1,7 +1,8 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -38,6 +39,7 @@ export function WeekViewScreen() {
     moveBlock,
     resizeBlockStart,
     resizeBlockEnd,
+    setHourHeight,
     clearError,
   } = useCalendar();
 
@@ -47,6 +49,16 @@ export function WeekViewScreen() {
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
+
+  const scrollYRef = useRef(0);
+  const scrollRefs = useRef<Record<number, ScrollView | null>>({});
+
+  const syncScroll = useCallback((y: number) => {
+    scrollYRef.current = y;
+    [-1, 1].forEach((offset) => {
+      scrollRefs.current[offset]?.scrollTo({ y, animated: false });
+    });
+  }, []);
 
   const openEditForm = useCallback((block: TimeBlock) => {
     setEditingBlock(block);
@@ -144,6 +156,12 @@ export function WeekViewScreen() {
             config={config}
             weekStart={weekStart}
             interactive={isCurrentPage}
+            initialScrollY={scrollYRef.current}
+            registerScrollRef={(node) => {
+              scrollRefs.current[weekOffset] = node;
+            }}
+            onVerticalScroll={isCurrentPage ? syncScroll : undefined}
+            onZoom={isCurrentPage ? setHourHeight : undefined}
             onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
               void handleSlotCreate(weekStart, dayIndex, startMinutes, endMinutes);
             }}
@@ -170,6 +188,8 @@ export function WeekViewScreen() {
       resizeBlockEnd,
       resizeBlockStart,
       selectedWeekStart,
+      setHourHeight,
+      syncScroll,
     ],
   );
 

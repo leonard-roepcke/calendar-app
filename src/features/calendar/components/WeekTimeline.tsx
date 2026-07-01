@@ -1,5 +1,12 @@
-import { useCallback, useMemo, useState } from 'react';
-import { LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import {
+  LayoutChangeEvent,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
@@ -27,11 +34,15 @@ interface WeekTimelineProps {
   config: CalendarConfig;
   weekStart: Date;
   interactive?: boolean;
+  initialScrollY?: number;
   onSlotCreate: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: string, deltaDays: number, deltaMinutes: number) => void;
   onBlockResizeStart: (blockId: string, deltaMinutes: number) => void;
   onBlockResizeEnd: (blockId: string, deltaMinutes: number) => void;
+  onZoom?: (nextHourHeight: number) => void;
+  onVerticalScroll?: (y: number) => void;
+  registerScrollRef?: (node: ScrollView | null) => void;
 }
 
 function WeekHourGrid({
@@ -99,11 +110,15 @@ export function WeekTimeline({
   config,
   weekStart,
   interactive = true,
+  initialScrollY = 0,
   onSlotCreate,
   onBlockPress,
   onBlockMove,
   onBlockResizeStart,
   onBlockResizeEnd,
+  onZoom,
+  onVerticalScroll,
+  registerScrollRef,
 }: WeekTimelineProps) {
   const [gridWidth, setGridWidth] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
@@ -111,9 +126,40 @@ export function WeekTimeline({
   const { layouts, blocks, columnWidth } = useWeekTimeline(gridWidth, weekStart);
   const metrics = getTimelineMetrics(config);
 
+  const hourHeightRef = useRef(config.hourHeight);
+  hourHeightRef.current = config.hourHeight;
+  const pinchBaseRef = useRef(config.hourHeight);
+  const lastZoomRef = useRef(config.hourHeight);
+
   const handleLayout = (event: LayoutChangeEvent) => {
     setGridWidth(event.nativeEvent.layout.width);
   };
+
+  const capturePinchBase = useCallback(() => {
+    pinchBaseRef.current = hourHeightRef.current;
+    lastZoomRef.current = hourHeightRef.current;
+  }, []);
+
+  const applyZoom = useCallback(
+    (scale: number) => {
+      if (!onZoom) {
+        return;
+      }
+      const next = Math.round(pinchBaseRef.current * scale);
+      if (next !== lastZoomRef.current) {
+        lastZoomRef.current = next;
+        onZoom(next);
+      }
+    },
+    [onZoom],
+  );
+
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      onVerticalScroll?.(event.nativeEvent.contentOffset.y);
+    },
+    [onVerticalScroll],
+  );
 
   const positionToSlot = useCallback(
     (x: number, y: number) => {
@@ -213,13 +259,28 @@ export function WeekTimeline({
     setScrollLocked(active);
   }, []);
 
+  const pinchGesture = useMemo(
+    () =>
+      Gesture.Pinch()
+        .enabled(interactive && Boolean(onZoom))
+        .onStart(() => {
+          runOnJS(capturePinchBase)();
+        })
+        .onUpdate((event) => {
+          runOnJS(applyZoom)(event.scale);
+        }),
+    [applyZoom, capturePinchBase, interactive, onZoom],
+  );
+
   const showCreationPreview =
     creationDraft !== null &&
     creationDraft.endMinutes > creationDraft.startMinutes;
 
   return (
+    <GestureDetector gesture={pinchGesture}>
     <View style={styles.container}>
       <ScrollView
+        ref={registerScrollRef}
         style={styles.scroll}
         contentContainerStyle={{
           paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING,
@@ -230,6 +291,9 @@ export function WeekTimeline({
         nestedScrollEnabled
         keyboardShouldPersistTaps="handled"
         removeClippedSubviews={false}
+        contentOffset={{ x: 0, y: initialScrollY }}
+        onScroll={interactive ? handleScroll : undefined}
+        scrollEventThrottle={16}
       >
         <View style={[styles.row, { minHeight: metrics.totalHeight }]}>
           <TimeColumn config={config} />
@@ -284,6 +348,7 @@ export function WeekTimeline({
         </View>
       </ScrollView>
     </View>
+    </GestureDetector>
   );
 }
 
