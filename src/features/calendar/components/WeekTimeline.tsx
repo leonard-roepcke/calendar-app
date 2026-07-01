@@ -1,11 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import {
-  LayoutChangeEvent,
-  ScrollView,
-  StyleSheet,
-  View,
-  type GestureResponderEvent,
-} from 'react-native';
+import { LayoutChangeEvent, ScrollView, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
@@ -191,44 +185,33 @@ export function WeekTimeline({
     setCreationDraft(null);
   }, []);
 
-  const handleLongPress = useCallback(
-    (x: number, y: number) => {
-      if (!interactive) {
-        return;
-      }
-      beginCreation(x, y);
-    },
-    [beginCreation, interactive],
-  );
-
-  const longPressGesture = useMemo(
+  const createGesture = useMemo(
     () =>
-      Gesture.LongPress()
-        .minDuration(500)
-        .maxDistance(12)
+      Gesture.Pan()
+        .enabled(interactive)
+        .activateAfterLongPress(400)
+        .maxPointers(1)
         .onStart((event) => {
-          runOnJS(handleLongPress)(event.x, event.y);
+          runOnJS(beginCreation)(event.x, event.y);
+        })
+        .onUpdate((event) => {
+          runOnJS(updateCreation)(event.x, event.y);
+        })
+        .onEnd(() => {
+          runOnJS(finishCreation)();
+        })
+        .onFinalize((_event, success) => {
+          if (!success) {
+            runOnJS(cancelCreation)();
+          }
         }),
-    [handleLongPress],
+    [beginCreation, cancelCreation, finishCreation, interactive, updateCreation],
   );
-
-  const handleDragMove = useCallback(
-    (event: GestureResponderEvent) => {
-      const { locationX, locationY } = event.nativeEvent;
-      updateCreation(locationX, locationY);
-    },
-    [updateCreation],
-  );
-
-  const handleDragEnd = useCallback(() => {
-    finishCreation();
-  }, [finishCreation]);
 
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);
   }, []);
 
-  const isCreating = creationDraft !== null;
   const showCreationPreview =
     creationDraft !== null &&
     creationDraft.endMinutes > creationDraft.startMinutes;
@@ -257,23 +240,14 @@ export function WeekTimeline({
           >
             <WeekHourGrid config={config} columnCount={7} />
 
-            {interactive && !isCreating ? (
-              <GestureDetector gesture={longPressGesture}>
+            {interactive ? (
+              <GestureDetector gesture={createGesture}>
                 <View
                   style={styles.creationCapture}
                   accessibilityRole="button"
                   accessibilityLabel="Termin per Langdruck erstellen"
                 />
               </GestureDetector>
-            ) : null}
-
-            {isCreating ? (
-              <View
-                style={styles.creationCapture}
-                onTouchMove={handleDragMove}
-                onTouchEnd={handleDragEnd}
-                onTouchCancel={cancelCreation}
-              />
             ) : null}
 
             {showCreationPreview && creationDraft && columnWidth > 0 ? (
