@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -6,19 +6,21 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Gesture } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
-import { dateFromDayMinutes } from '../../../shared/utils/dateTime';
+import { addDays, dateFromDayMinutes, getWeekDays } from '../../../shared/utils/dateTime';
 import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
 } from '../components/TimeBlockFormModal';
-import { WeekSwipeContainer } from '../components/WeekSwipeContainer';
+import { WeekPager } from '../components/WeekPager';
 import { WeekTimeline } from '../components/WeekTimeline';
 import { WeekToolbar } from '../components/WeekToolbar';
 import { useCalendar } from '../store/CalendarProvider';
+
+const DEFAULT_CREATE_MINUTES = 9 * 60;
+const DEFAULT_CREATE_DURATION = 60;
 
 export function WeekViewScreen() {
   const {
@@ -45,21 +47,23 @@ export function WeekViewScreen() {
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
-  const scrollNativeGesture = useMemo(() => Gesture.Native(), []);
 
-  const openEditForm = (block: TimeBlock) => {
+  const openEditForm = useCallback((block: TimeBlock) => {
     setEditingBlock(block);
     setFormDay(block.startAt);
     setPrefilledStartMinutes(null);
     setIsFormVisible(true);
-  };
+  }, []);
 
-  const openEditFormById = (blockId: string) => {
-    const block = blocks.find((item) => item.id === blockId);
-    if (block) {
-      openEditForm(block);
-    }
-  };
+  const openEditFormById = useCallback(
+    (blockId: string) => {
+      const block = blocks.find((item) => item.id === blockId);
+      if (block) {
+        openEditForm(block);
+      }
+    },
+    [blocks, openEditForm],
+  );
 
   const closeForm = () => {
     setIsFormVisible(false);
@@ -67,20 +71,18 @@ export function WeekViewScreen() {
     setPrefilledStartMinutes(null);
   };
 
-  const handleSlotCreate = async (
-    dayIndex: number,
-    startMinutes: number,
-    endMinutes: number,
-  ) => {
-    const day = weekDays[dayIndex] ?? selectedWeekStart;
-    const block = await createBlock({
-      title: 'Neuer Termin',
-      startAt: dateFromDayMinutes(day, startMinutes),
-      endAt: dateFromDayMinutes(day, endMinutes),
-      color: blockColorOptions[0],
-    });
-    openEditForm(block);
-  };
+  const handleDayLongPress = useCallback(
+    async (day: Date) => {
+      const block = await createBlock({
+        title: 'Neuer Termin',
+        startAt: dateFromDayMinutes(day, DEFAULT_CREATE_MINUTES),
+        endAt: dateFromDayMinutes(day, DEFAULT_CREATE_MINUTES + DEFAULT_CREATE_DURATION),
+        color: blockColorOptions[0],
+      });
+      openEditForm(block);
+    },
+    [createBlock, openEditForm],
+  );
 
   const handleSubmit = async (values: TimeBlockFormValues) => {
     const startAt = dateFromDayMinutes(formDay, values.startMinutes);
@@ -106,6 +108,47 @@ export function WeekViewScreen() {
     closeForm();
   };
 
+  const renderWeekPage = useCallback(
+    (weekOffset: -1 | 0 | 1) => {
+      const weekStart = addDays(selectedWeekStart, weekOffset * 7);
+      const days = getWeekDays(weekStart);
+      const isCurrentPage = weekOffset === 0;
+
+      return (
+        <View style={styles.pageContent}>
+          <WeekToolbar
+            weekDays={days}
+            onDayLongPress={isCurrentPage ? handleDayLongPress : undefined}
+          />
+          <WeekTimeline
+            config={config}
+            weekStart={weekStart}
+            interactive={isCurrentPage}
+            onBlockPress={openEditFormById}
+            onBlockMove={(blockId, deltaDays, deltaMinutes) => {
+              void moveBlock(blockId, deltaDays, deltaMinutes);
+            }}
+            onBlockResizeStart={(blockId, deltaMinutes) => {
+              void resizeBlockStart(blockId, deltaMinutes);
+            }}
+            onBlockResizeEnd={(blockId, deltaMinutes) => {
+              void resizeBlockEnd(blockId, deltaMinutes);
+            }}
+          />
+        </View>
+      );
+    },
+    [
+      config,
+      handleDayLongPress,
+      moveBlock,
+      openEditFormById,
+      resizeBlockEnd,
+      resizeBlockStart,
+      selectedWeekStart,
+    ],
+  );
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       {error ? (
@@ -119,30 +162,12 @@ export function WeekViewScreen() {
           <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
-        <WeekSwipeContainer
+        <WeekPager
+          pageKey={selectedWeekStart.toISOString()}
           onPreviousWeek={goToPreviousWeek}
           onNextWeek={goToNextWeek}
-          scrollNativeGesture={scrollNativeGesture}
-        >
-          <WeekToolbar weekDays={weekDays} />
-          <WeekTimeline
-            config={config}
-            scrollNativeGesture={scrollNativeGesture}
-            onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
-              void handleSlotCreate(dayIndex, startMinutes, endMinutes);
-            }}
-            onBlockPress={openEditFormById}
-            onBlockMove={(blockId, deltaDays, deltaMinutes) => {
-              void moveBlock(blockId, deltaDays, deltaMinutes);
-            }}
-            onBlockResizeStart={(blockId, deltaMinutes) => {
-              void resizeBlockStart(blockId, deltaMinutes);
-            }}
-            onBlockResizeEnd={(blockId, deltaMinutes) => {
-              void resizeBlockEnd(blockId, deltaMinutes);
-            }}
-          />
-        </WeekSwipeContainer>
+          renderPage={renderWeekPage}
+        />
       )}
 
       <TimeBlockFormModal
@@ -162,6 +187,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  pageContent: {
+    flex: 1,
   },
   loading: {
     flex: 1,

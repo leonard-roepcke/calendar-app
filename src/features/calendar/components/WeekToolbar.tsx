@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors } from '../../../shared/theme/colors';
 import {
   TIMELINE_HORIZONTAL_PADDING,
@@ -13,19 +13,29 @@ import {
 
 interface WeekToolbarProps {
   weekDays: Date[];
+  onDayLongPress?: (day: Date, dayIndex: number) => void;
 }
 
-export function WeekToolbar({ weekDays }: WeekToolbarProps) {
+export function WeekToolbar({ weekDays, onDayLongPress }: WeekToolbarProps) {
   const today = startOfDay(new Date());
 
   return (
     <View style={styles.container}>
       <View style={styles.daysRow}>
         <View style={styles.timeGutter} />
-        {weekDays.map((day) => {
+        {weekDays.map((day, dayIndex) => {
           const isToday = isSameDay(day, today);
           return (
-            <View key={day.toISOString()} style={styles.column}>
+            <Pressable
+              key={day.toISOString()}
+              style={styles.column}
+              delayLongPress={500}
+              onLongPress={
+                onDayLongPress ? () => onDayLongPress(day, dayIndex) : undefined
+              }
+              accessibilityRole="button"
+              accessibilityLabel={`${formatWeekdayShort(day)} ${formatDayNumber(day)}`}
+            >
               <Text style={[styles.weekday, isToday && styles.todayText]}>
                 {formatWeekdayShort(day)}
               </Text>
@@ -34,7 +44,7 @@ export function WeekToolbar({ weekDays }: WeekToolbarProps) {
                   {formatDayNumber(day)}
                 </Text>
               </View>
-            </View>
+            </Pressable>
           );
         })}
       </View>
@@ -61,6 +71,7 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     gap: 2,
+    paddingVertical: 4,
   },
   weekday: {
     fontSize: 10,

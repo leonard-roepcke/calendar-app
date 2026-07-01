@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   type ReactNode,
 } from 'react';
 import { InMemoryTimeBlockRepository } from '../../../data/repositories/InMemoryTimeBlockRepository';
@@ -109,8 +110,12 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     [state.selectedWeekStart],
   );
 
-  const refreshWeek = useCallback(async () => {
-    dispatch({ type: 'SET_LOADING', isLoading: true });
+  const hasLoadedRef = useRef(false);
+
+  const refreshWeek = useCallback(async (showLoading = false) => {
+    if (showLoading) {
+      dispatch({ type: 'SET_LOADING', isLoading: true });
+    }
     try {
       const blocks = await timeBlockService.listWeek(state.selectedWeekStart);
       dispatch({ type: 'SET_BLOCKS', blocks });
@@ -121,12 +126,16 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         error: error instanceof Error ? error.message : 'Unbekannter Fehler',
       });
     } finally {
-      dispatch({ type: 'SET_LOADING', isLoading: false });
+      if (showLoading) {
+        dispatch({ type: 'SET_LOADING', isLoading: false });
+      }
     }
   }, [state.selectedWeekStart]);
 
   useEffect(() => {
-    void refreshWeek();
+    void refreshWeek(!hasLoadedRef.current).finally(() => {
+      hasLoadedRef.current = true;
+    });
   }, [refreshWeek]);
 
   const goToPreviousWeek = useCallback(() => {
