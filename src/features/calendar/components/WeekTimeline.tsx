@@ -15,6 +15,7 @@ import {
 import { useWeekTimeline } from '../hooks/useWeekTimeline';
 import { HourGrid, TimeColumn } from './HourGrid';
 import { DraggableTimeBlockLayer } from './DraggableTimeBlockCard';
+import { TimeBlockLayer } from './TimeBlockCard';
 
 export interface SlotCreationDraft {
   dayIndex: number;
@@ -269,6 +270,14 @@ export function WeekTimeline({
                 onBlockResizeStart={onBlockResizeStart}
                 onBlockResizeEnd={onBlockResizeEnd}
                 onInteractionChange={handleBlockInteraction}
+              />
+            ) : null}
+
+            {gridWidth > 0 && !interactive ? (
+              <TimeBlockLayer
+                blocks={blocks}
+                layouts={layouts}
+                onBlockPress={onBlockPress}
               />
             ) : null}
           </View>

@@ -22,10 +22,21 @@ import { computeBlockMove, computeBlockResizeEnd, computeBlockResizeStart } from
 import {
   addDays,
   getWeekDays,
-  isDateInWeek,
   startOfDay,
   startOfWeek,
 } from '../../../shared/utils/dateTime';
+
+function loadedRange(selectedWeekStart: Date): { start: Date; end: Date } {
+  return {
+    start: addDays(selectedWeekStart, -7),
+    end: addDays(selectedWeekStart, 14),
+  };
+}
+
+function isDateInLoadedRange(date: Date, selectedWeekStart: Date): boolean {
+  const { start, end } = loadedRange(selectedWeekStart);
+  return date.getTime() >= start.getTime() && date.getTime() < end.getTime();
+}
 
 interface CalendarState {
   selectedWeekStart: Date;
@@ -117,7 +128,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       dispatch({ type: 'SET_LOADING', isLoading: true });
     }
     try {
-      const blocks = await timeBlockService.listWeek(state.selectedWeekStart);
+      const { start, end } = loadedRange(state.selectedWeekStart);
+      const blocks = await timeBlockService.listRange(start, end);
       dispatch({ type: 'SET_BLOCKS', blocks });
       dispatch({ type: 'SET_ERROR', error: null });
     } catch (error) {
@@ -160,7 +172,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     async (input: CreateTimeBlockInput): Promise<TimeBlock> => {
       try {
         const block = await timeBlockService.create(input);
-        if (isDateInWeek(block.startAt, state.selectedWeekStart)) {
+        if (isDateInLoadedRange(block.startAt, state.selectedWeekStart)) {
           dispatch({ type: 'ADD_BLOCK', block });
         }
         dispatch({ type: 'SET_ERROR', error: null });
@@ -180,7 +192,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     async (input: UpdateTimeBlockInput) => {
       try {
         const block = await timeBlockService.update(input);
-        if (isDateInWeek(block.startAt, state.selectedWeekStart)) {
+        if (isDateInLoadedRange(block.startAt, state.selectedWeekStart)) {
           dispatch({ type: 'UPDATE_BLOCK', block });
         } else {
           dispatch({ type: 'REMOVE_BLOCK', id: block.id });

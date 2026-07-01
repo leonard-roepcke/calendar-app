@@ -8,14 +8,12 @@ import type { ReactNode } from 'react';
 const CENTER_PAGE = 1;
 
 interface WeekPagerProps {
-  pageKey: string;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
   renderPage: (weekOffset: -1 | 0 | 1) => ReactNode;
 }
 
 export function WeekPager({
-  pageKey,
   onPreviousWeek,
   onNextWeek,
   renderPage,
@@ -30,15 +28,17 @@ export function WeekPager({
       }
 
       const position = event.nativeEvent.position;
-      if (position === 0) {
-        onPreviousWeek();
-      } else if (position === 2) {
-        onNextWeek();
-      } else {
+      if (position === CENTER_PAGE) {
         return;
       }
 
       isResettingRef.current = true;
+      if (position === 0) {
+        onPreviousWeek();
+      } else if (position === 2) {
+        onNextWeek();
+      }
+
       requestAnimationFrame(() => {
         pagerRef.current?.setPageWithoutAnimation(CENTER_PAGE);
         isResettingRef.current = false;
@@ -49,12 +49,11 @@ export function WeekPager({
 
   return (
     <PagerView
-      key={pageKey}
       ref={pagerRef}
       style={styles.pager}
       initialPage={CENTER_PAGE}
       onPageSelected={handlePageSelected}
-      overdrag
+      overdrag={false}
       offscreenPageLimit={1}
     >
       <View key="prev" style={styles.page} collapsable={false}>

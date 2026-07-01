@@ -187,7 +187,6 @@ export function WeekViewScreen() {
         </View>
       ) : (
         <WeekPager
-          pageKey={selectedWeekStart.toISOString()}
           onPreviousWeek={goToPreviousWeek}
           onNextWeek={goToNextWeek}
           renderPage={renderWeekPage}
