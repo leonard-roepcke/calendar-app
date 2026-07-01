@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { Gesture, GestureDetector, ScrollView } from 'react-native-gesture-handler';
-import { runOnJS } from 'react-native-reanimated';
+import { runOnJS, useSharedValue } from 'react-native-reanimated';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
 import { colors, blockColorOptions } from '../../../shared/theme/colors';
 import {
@@ -105,6 +105,7 @@ export function WeekTimeline({
   const [gridWidth, setGridWidth] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
   const [creationDraft, setCreationDraft] = useState<SlotCreationDraft | null>(null);
+  const creationActive = useSharedValue(false);
   const { layouts, blocks, columnWidth } = useWeekTimeline(gridWidth);
   const metrics = getTimelineMetrics(config);
 
@@ -130,6 +131,7 @@ export function WeekTimeline({
       if (!slot) {
         return;
       }
+      creationActive.value = true;
       setScrollLocked(true);
       setCreationDraft({
         dayIndex: slot.dayIndex,
@@ -137,7 +139,7 @@ export function WeekTimeline({
         endMinutes: slot.minutes,
       });
     },
-    [positionToSlot],
+    [creationActive, positionToSlot],
   );
 
   const updateCreation = useCallback(
@@ -169,6 +171,7 @@ export function WeekTimeline({
   );
 
   const finishCreation = useCallback(() => {
+    creationActive.value = false;
     setScrollLocked(false);
     setCreationDraft((current) => {
       if (current && current.endMinutes > current.startMinutes) {
@@ -176,22 +179,37 @@ export function WeekTimeline({
       }
       return null;
     });
-  }, [onSlotCreate]);
+  }, [creationActive, onSlotCreate]);
 
   const cancelCreation = useCallback(() => {
+    creationActive.value = false;
     setScrollLocked(false);
     setCreationDraft(null);
-  }, []);
+  }, [creationActive]);
 
-  const createGesture = useMemo(
+  const longPressGesture = useMemo(
     () =>
-      Gesture.Pan()
-        .activateAfterLongPress(500)
-        .failOffsetY([-10, 10])
-        .minDistance(12)
+      Gesture.LongPress()
+        .minDuration(500)
+        .maxDistance(12)
         .simultaneousWithExternalGesture(scrollNativeGesture)
         .onStart((event) => {
           runOnJS(beginCreation)(event.x, event.y);
+        }),
+    [beginCreation, scrollNativeGesture],
+  );
+
+  const createPanGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .manualActivation(true)
+        .simultaneousWithExternalGesture(scrollNativeGesture)
+        .onTouchesMove((_event, state) => {
+          if (creationActive.value) {
+            state.activate();
+            return;
+          }
+          state.fail();
         })
         .onUpdate((event) => {
           runOnJS(updateCreation)(event.x, event.y);
@@ -205,15 +223,18 @@ export function WeekTimeline({
           }
         }),
     [
-      beginCreation,
       cancelCreation,
+      creationActive,
       finishCreation,
       scrollNativeGesture,
       updateCreation,
     ],
   );
 
-  const gridGesture = createGesture;
+  const gridGesture = useMemo(
+    () => Gesture.Simultaneous(longPressGesture, createPanGesture),
+    [createPanGesture, longPressGesture],
+  );
 
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);
@@ -224,55 +245,62 @@ export function WeekTimeline({
     creationDraft.endMinutes > creationDraft.startMinutes;
 
   return (
-    <GestureDetector gesture={scrollNativeGesture}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={{
-          paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING,
-          minHeight: metrics.totalHeight + TIMELINE_SCROLL_BOTTOM_PADDING,
-        }}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={!scrollLocked}
-        nestedScrollEnabled
-      >
-        <View style={[styles.row, { minHeight: metrics.totalHeight }]}>
-          <TimeColumn config={config} />
-          <GestureDetector gesture={gridGesture}>
-            <View
-              style={[styles.gridArea, { height: metrics.totalHeight }]}
-              onLayout={handleLayout}
-              collapsable={false}
-            >
-              <WeekHourGrid config={config} columnCount={7} />
-              {showCreationPreview && creationDraft && columnWidth > 0 ? (
-                <CreationPreview
-                  draft={creationDraft}
-                  config={config}
-                  columnWidth={columnWidth}
-                />
-              ) : null}
-              {gridWidth > 0 ? (
-                <DraggableTimeBlockLayer
-                  blocks={blocks}
-                  layouts={layouts}
-                  config={config}
-                  columnWidth={columnWidth}
-                  onBlockPress={onBlockPress}
-                  onBlockMove={onBlockMove}
-                  onBlockResizeStart={onBlockResizeStart}
-                  onBlockResizeEnd={onBlockResizeEnd}
-                  onInteractionChange={handleBlockInteraction}
-                />
-              ) : null}
-            </View>
-          </GestureDetector>
-        </View>
-      </ScrollView>
-    </GestureDetector>
+    <View style={styles.container}>
+      <GestureDetector gesture={scrollNativeGesture}>
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={{
+            paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING,
+            minHeight: metrics.totalHeight + TIMELINE_SCROLL_BOTTOM_PADDING,
+          }}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!scrollLocked}
+          nestedScrollEnabled
+          bounces
+        >
+          <View style={[styles.row, { minHeight: metrics.totalHeight }]}>
+            <TimeColumn config={config} />
+            <GestureDetector gesture={gridGesture}>
+              <View
+                style={[styles.gridArea, { height: metrics.totalHeight }]}
+                onLayout={handleLayout}
+                collapsable={false}
+              >
+                <WeekHourGrid config={config} columnCount={7} />
+                {showCreationPreview && creationDraft && columnWidth > 0 ? (
+                  <CreationPreview
+                    draft={creationDraft}
+                    config={config}
+                    columnWidth={columnWidth}
+                  />
+                ) : null}
+                {gridWidth > 0 ? (
+                  <DraggableTimeBlockLayer
+                    blocks={blocks}
+                    layouts={layouts}
+                    config={config}
+                    columnWidth={columnWidth}
+                    scrollNativeGesture={scrollNativeGesture}
+                    onBlockPress={onBlockPress}
+                    onBlockMove={onBlockMove}
+                    onBlockResizeStart={onBlockResizeStart}
+                    onBlockResizeEnd={onBlockResizeEnd}
+                    onInteractionChange={handleBlockInteraction}
+                  />
+                ) : null}
+              </View>
+            </GestureDetector>
+          </View>
+        </ScrollView>
+      </GestureDetector>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
   scroll: {
     flex: 1,
     backgroundColor: colors.background,

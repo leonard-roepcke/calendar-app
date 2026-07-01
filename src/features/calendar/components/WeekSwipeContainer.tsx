@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { Dimensions, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -11,8 +11,9 @@ import Animated, {
 import type { ReactNode } from 'react';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.22;
-const VELOCITY_THRESHOLD = 650;
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.2;
+const VELOCITY_THRESHOLD = 600;
+const DIRECTION_LOCK_PX = 12;
 
 interface WeekSwipeContainerProps {
   children: ReactNode;
@@ -29,18 +30,56 @@ export function WeekSwipeContainer({
 }: WeekSwipeContainerProps) {
   const translateX = useSharedValue(0);
   const isAnimating = useSharedValue(false);
+  const touchStartX = useSharedValue(0);
+  const touchStartY = useSharedValue(0);
+
+  const completeWeekChange = useCallback(
+    (direction: 'next' | 'prev') => {
+      if (direction === 'next') {
+        onNextWeek();
+        return;
+      }
+      onPreviousWeek();
+    },
+    [onNextWeek, onPreviousWeek],
+  );
 
   const weekPan = useMemo(
     () =>
       Gesture.Pan()
-        .activeOffsetX([-18, 18])
-        .failOffsetY([-12, 12])
+        .manualActivation(true)
         .simultaneousWithExternalGesture(scrollNativeGesture)
-        .onUpdate((event) => {
+        .onTouchesDown((event) => {
+          touchStartX.value = event.allTouches[0]?.x ?? 0;
+          touchStartY.value = event.allTouches[0]?.y ?? 0;
+        })
+        .onTouchesMove((event, state) => {
           if (isAnimating.value) {
+            state.fail();
             return;
           }
-          if (Math.abs(event.translationX) > Math.abs(event.translationY) * 1.2) {
+
+          const touch = event.allTouches[0];
+          if (!touch) {
+            return;
+          }
+
+          const deltaX = touch.x - touchStartX.value;
+          const deltaY = touch.y - touchStartY.value;
+          const absX = Math.abs(deltaX);
+          const absY = Math.abs(deltaY);
+
+          if (absY > absX && absY > DIRECTION_LOCK_PX) {
+            state.fail();
+            return;
+          }
+
+          if (absX > absY && absX > DIRECTION_LOCK_PX) {
+            state.activate();
+          }
+        })
+        .onUpdate((event) => {
+          if (!isAnimating.value) {
             translateX.value = event.translationX;
           }
         })
@@ -56,48 +95,40 @@ export function WeekSwipeContainer({
 
           if (goNext) {
             isAnimating.value = true;
-            translateX.value = withTiming(
-              -SCREEN_WIDTH,
-              { duration: 220 },
-              (finished) => {
-                if (finished) {
-                  runOnJS(onNextWeek)();
-                  translateX.value = SCREEN_WIDTH;
-                  translateX.value = withTiming(0, { duration: 220 }, () => {
-                    isAnimating.value = false;
-                  });
-                }
-              },
-            );
+            translateX.value = withTiming(-SCREEN_WIDTH, { duration: 180 }, (finished) => {
+              if (!finished) {
+                isAnimating.value = false;
+                return;
+              }
+              translateX.value = 0;
+              isAnimating.value = false;
+              runOnJS(completeWeekChange)('next');
+            });
             return;
           }
 
           if (goPrev) {
             isAnimating.value = true;
-            translateX.value = withTiming(
-              SCREEN_WIDTH,
-              { duration: 220 },
-              (finished) => {
-                if (finished) {
-                  runOnJS(onPreviousWeek)();
-                  translateX.value = -SCREEN_WIDTH;
-                  translateX.value = withTiming(0, { duration: 220 }, () => {
-                    isAnimating.value = false;
-                  });
-                }
-              },
-            );
+            translateX.value = withTiming(SCREEN_WIDTH, { duration: 180 }, (finished) => {
+              if (!finished) {
+                isAnimating.value = false;
+                return;
+              }
+              translateX.value = 0;
+              isAnimating.value = false;
+              runOnJS(completeWeekChange)('prev');
+            });
             return;
           }
 
           translateX.value = withSpring(0, { damping: 22, stiffness: 280 });
         })
         .onFinalize(() => {
-          if (!isAnimating.value && Math.abs(translateX.value) < 1) {
-            translateX.value = withSpring(0);
+          if (!isAnimating.value) {
+            translateX.value = withSpring(0, { damping: 22, stiffness: 280 });
           }
         }),
-    [isAnimating, onNextWeek, onPreviousWeek, scrollNativeGesture, translateX],
+    [completeWeekChange, isAnimating, scrollNativeGesture, touchStartX, touchStartY, translateX],
   );
 
   const animatedStyle = useAnimatedStyle(() => ({
@@ -106,7 +137,9 @@ export function WeekSwipeContainer({
 
   return (
     <GestureDetector gesture={weekPan}>
-      <Animated.View style={[styles.container, animatedStyle]}>{children}</Animated.View>
+      <Animated.View style={[styles.container, animatedStyle]} collapsable={false}>
+        {children}
+      </Animated.View>
     </GestureDetector>
   );
 }

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  GestureHandlerRootView,
-  ScrollView,
-  TextInput,
-} from 'react-native-gesture-handler';
+import { ScrollView, TextInput } from 'react-native-gesture-handler';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
 import {
@@ -139,7 +135,7 @@ export function TimeBlockFormModal({
       transparent
       onRequestClose={() => void saveAndClose()}
     >
-      <GestureHandlerRootView style={styles.root}>
+      <View style={styles.root}>
         <View style={styles.backdrop}>
           <Pressable
             style={styles.backdropPress}
@@ -292,7 +288,7 @@ export function TimeBlockFormModal({
             </View>
           </View>
         </View>
-      </GestureHandlerRootView>
+      </View>
     </Modal>
   );
 }

@@ -24,6 +24,7 @@ interface DraggableTimeBlockCardProps {
   layout: BlockLayout;
   config: CalendarConfig;
   columnWidth: number;
+  scrollNativeGesture: ReturnType<typeof Gesture.Native>;
   onPress: () => void;
   onMove: (blockId: TimeBlockId, deltaDays: number, deltaMinutes: number) => void;
   onResizeStart: (blockId: TimeBlockId, deltaMinutes: number) => void;
@@ -36,6 +37,7 @@ export function DraggableTimeBlockCard({
   layout,
   config,
   columnWidth,
+  scrollNativeGesture,
   onPress,
   onMove,
   onResizeStart,
@@ -110,6 +112,9 @@ export function DraggableTimeBlockCard({
     (mode: HandleMode, onFinish: (tx: number, ty: number) => void) =>
       Gesture.Pan()
         .minDistance(0)
+        .activeOffsetY([-6, 6])
+        .activeOffsetX([-6, 6])
+        .simultaneousWithExternalGesture(scrollNativeGesture)
         .onBegin(() => {
           isDragging.value = true;
           runOnJS(onInteractionChange)(true);
@@ -158,13 +163,13 @@ export function DraggableTimeBlockCard({
         }),
     [
       columnWidth,
-      config,
       isDragging,
       metrics.minutesPerPixel,
       onInteractionChange,
       resetTransforms,
       resizeHeight,
       resizeTop,
+      scrollNativeGesture,
       snapMinutes,
       translateX,
       translateY,
@@ -234,6 +239,7 @@ interface DraggableTimeBlockLayerProps {
   layouts: BlockLayout[];
   config: CalendarConfig;
   columnWidth: number;
+  scrollNativeGesture: ReturnType<typeof Gesture.Native>;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: TimeBlockId, deltaDays: number, deltaMinutes: number) => void;
   onBlockResizeStart: (blockId: TimeBlockId, deltaMinutes: number) => void;
@@ -246,6 +252,7 @@ export function DraggableTimeBlockLayer({
   layouts,
   config,
   columnWidth,
+  scrollNativeGesture,
   onBlockPress,
   onBlockMove,
   onBlockResizeStart,
@@ -269,6 +276,7 @@ export function DraggableTimeBlockLayer({
             layout={blockLayout}
             config={config}
             columnWidth={columnWidth}
+            scrollNativeGesture={scrollNativeGesture}
             onPress={() => onBlockPress(block.id)}
             onMove={onBlockMove}
             onResizeStart={onBlockResizeStart}
