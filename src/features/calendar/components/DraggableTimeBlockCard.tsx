@@ -288,6 +288,7 @@ const HANDLE_SIZE = 22;
 const styles = StyleSheet.create({
   layer: {
     ...StyleSheet.absoluteFill,
+    zIndex: 4,
   },
   card: {
     position: 'absolute',

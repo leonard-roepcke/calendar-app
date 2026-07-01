@@ -71,6 +71,26 @@ export function WeekViewScreen() {
     setPrefilledStartMinutes(null);
   };
 
+  const handleSlotCreate = useCallback(
+    async (
+      weekStart: Date,
+      dayIndex: number,
+      startMinutes: number,
+      endMinutes: number,
+    ) => {
+      const days = getWeekDays(weekStart);
+      const day = days[dayIndex] ?? weekStart;
+      const block = await createBlock({
+        title: 'Neuer Termin',
+        startAt: dateFromDayMinutes(day, startMinutes),
+        endAt: dateFromDayMinutes(day, endMinutes),
+        color: blockColorOptions[0],
+      });
+      openEditForm(block);
+    },
+    [createBlock, openEditForm],
+  );
+
   const handleDayLongPress = useCallback(
     async (day: Date) => {
       const block = await createBlock({
@@ -124,6 +144,9 @@ export function WeekViewScreen() {
             config={config}
             weekStart={weekStart}
             interactive={isCurrentPage}
+            onSlotCreate={(dayIndex, startMinutes, endMinutes) => {
+              void handleSlotCreate(weekStart, dayIndex, startMinutes, endMinutes);
+            }}
             onBlockPress={openEditFormById}
             onBlockMove={(blockId, deltaDays, deltaMinutes) => {
               void moveBlock(blockId, deltaDays, deltaMinutes);
@@ -141,6 +164,7 @@ export function WeekViewScreen() {
     [
       config,
       handleDayLongPress,
+      handleSlotCreate,
       moveBlock,
       openEditFormById,
       resizeBlockEnd,

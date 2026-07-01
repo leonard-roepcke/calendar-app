@@ -1,25 +1,38 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   LayoutChangeEvent,
   ScrollView,
   StyleSheet,
   View,
+  type GestureResponderEvent,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import type { CalendarConfig } from '../../../domain/models/calendarConfig';
-import { colors } from '../../../shared/theme/colors';
+import { colors, blockColorOptions } from '../../../shared/theme/colors';
 import {
   getTimelineMetrics,
+  minutesToY,
+  normalizeCreationRange,
   TIMELINE_HORIZONTAL_PADDING,
   TIMELINE_SCROLL_BOTTOM_PADDING,
+  yToMinutes,
 } from '../../../shared/utils/layout';
 import { useWeekTimeline } from '../hooks/useWeekTimeline';
 import { HourGrid, TimeColumn } from './HourGrid';
 import { DraggableTimeBlockLayer } from './DraggableTimeBlockCard';
 
+export interface SlotCreationDraft {
+  dayIndex: number;
+  startMinutes: number;
+  endMinutes: number;
+}
+
 interface WeekTimelineProps {
   config: CalendarConfig;
   weekStart: Date;
   interactive?: boolean;
+  onSlotCreate: (dayIndex: number, startMinutes: number, endMinutes: number) => void;
   onBlockPress: (blockId: string) => void;
   onBlockMove: (blockId: string, deltaDays: number, deltaMinutes: number) => void;
   onBlockResizeStart: (blockId: string, deltaMinutes: number) => void;
@@ -57,10 +70,41 @@ function WeekHourGrid({
   );
 }
 
+function CreationPreview({
+  draft,
+  config,
+  columnWidth,
+}: {
+  draft: SlotCreationDraft;
+  config: CalendarConfig;
+  columnWidth: number;
+}) {
+  const metrics = getTimelineMetrics(config);
+  const top = minutesToY(draft.startMinutes, config, metrics);
+  const bottom = minutesToY(draft.endMinutes, config, metrics);
+  const height = Math.max(bottom - top, config.hourHeight / 4);
+
+  return (
+    <View
+      pointerEvents="none"
+      style={[
+        styles.creationPreview,
+        {
+          top,
+          left: draft.dayIndex * columnWidth + 2,
+          width: columnWidth - 4,
+          height,
+        },
+      ]}
+    />
+  );
+}
+
 export function WeekTimeline({
   config,
   weekStart,
   interactive = true,
+  onSlotCreate,
   onBlockPress,
   onBlockMove,
   onBlockResizeStart,
@@ -68,6 +112,7 @@ export function WeekTimeline({
 }: WeekTimelineProps) {
   const [gridWidth, setGridWidth] = useState(0);
   const [scrollLocked, setScrollLocked] = useState(false);
+  const [creationDraft, setCreationDraft] = useState<SlotCreationDraft | null>(null);
   const { layouts, blocks, columnWidth } = useWeekTimeline(gridWidth, weekStart);
   const metrics = getTimelineMetrics(config);
 
@@ -75,9 +120,118 @@ export function WeekTimeline({
     setGridWidth(event.nativeEvent.layout.width);
   };
 
+  const positionToSlot = useCallback(
+    (x: number, y: number) => {
+      if (columnWidth <= 0) {
+        return null;
+      }
+      const dayIndex = Math.min(Math.max(Math.floor(x / columnWidth), 0), 6);
+      const minutes = yToMinutes(y, config, metrics);
+      return { dayIndex, minutes };
+    },
+    [columnWidth, config, metrics],
+  );
+
+  const beginCreation = useCallback(
+    (x: number, y: number) => {
+      const slot = positionToSlot(x, y);
+      if (!slot) {
+        return;
+      }
+      setScrollLocked(true);
+      setCreationDraft({
+        dayIndex: slot.dayIndex,
+        startMinutes: slot.minutes,
+        endMinutes: slot.minutes,
+      });
+    },
+    [positionToSlot],
+  );
+
+  const updateCreation = useCallback(
+    (x: number, y: number) => {
+      setCreationDraft((current) => {
+        if (!current) {
+          return current;
+        }
+        const slot = positionToSlot(x, y);
+        if (!slot) {
+          return current;
+        }
+        if (slot.minutes === current.startMinutes) {
+          return current;
+        }
+        const normalized = normalizeCreationRange(
+          current.startMinutes,
+          slot.minutes,
+          config,
+        );
+        return {
+          dayIndex: current.dayIndex,
+          startMinutes: normalized.startMinutes,
+          endMinutes: normalized.endMinutes,
+        };
+      });
+    },
+    [config, positionToSlot],
+  );
+
+  const finishCreation = useCallback(() => {
+    setScrollLocked(false);
+    setCreationDraft((current) => {
+      if (current && current.endMinutes > current.startMinutes) {
+        onSlotCreate(current.dayIndex, current.startMinutes, current.endMinutes);
+      }
+      return null;
+    });
+  }, [onSlotCreate]);
+
+  const cancelCreation = useCallback(() => {
+    setScrollLocked(false);
+    setCreationDraft(null);
+  }, []);
+
+  const handleLongPress = useCallback(
+    (x: number, y: number) => {
+      if (!interactive) {
+        return;
+      }
+      beginCreation(x, y);
+    },
+    [beginCreation, interactive],
+  );
+
+  const longPressGesture = useMemo(
+    () =>
+      Gesture.LongPress()
+        .minDuration(500)
+        .maxDistance(12)
+        .onStart((event) => {
+          runOnJS(handleLongPress)(event.x, event.y);
+        }),
+    [handleLongPress],
+  );
+
+  const handleDragMove = useCallback(
+    (event: GestureResponderEvent) => {
+      const { locationX, locationY } = event.nativeEvent;
+      updateCreation(locationX, locationY);
+    },
+    [updateCreation],
+  );
+
+  const handleDragEnd = useCallback(() => {
+    finishCreation();
+  }, [finishCreation]);
+
   const handleBlockInteraction = useCallback((active: boolean) => {
     setScrollLocked(active);
   }, []);
+
+  const isCreating = creationDraft !== null;
+  const showCreationPreview =
+    creationDraft !== null &&
+    creationDraft.endMinutes > creationDraft.startMinutes;
 
   return (
     <View style={styles.container}>
@@ -102,6 +256,33 @@ export function WeekTimeline({
             pointerEvents="box-none"
           >
             <WeekHourGrid config={config} columnCount={7} />
+
+            {interactive && !isCreating ? (
+              <GestureDetector gesture={longPressGesture}>
+                <View
+                  style={styles.creationCapture}
+                  accessibilityRole="button"
+                  accessibilityLabel="Termin per Langdruck erstellen"
+                />
+              </GestureDetector>
+            ) : null}
+
+            {isCreating ? (
+              <View
+                style={styles.creationCapture}
+                onTouchMove={handleDragMove}
+                onTouchEnd={handleDragEnd}
+                onTouchCancel={cancelCreation}
+              />
+            ) : null}
+
+            {showCreationPreview && creationDraft && columnWidth > 0 ? (
+              <CreationPreview
+                draft={creationDraft}
+                config={config}
+                columnWidth={columnWidth}
+              />
+            ) : null}
 
             {gridWidth > 0 && interactive ? (
               <DraggableTimeBlockLayer
@@ -140,6 +321,10 @@ const styles = StyleSheet.create({
     flex: 1,
     position: 'relative',
   },
+  creationCapture: {
+    ...StyleSheet.absoluteFill,
+    zIndex: 1,
+  },
   weekGrid: {
     position: 'absolute',
     left: 0,
@@ -151,5 +336,14 @@ const styles = StyleSheet.create({
     top: 0,
     width: StyleSheet.hairlineWidth,
     backgroundColor: colors.gridLine,
+  },
+  creationPreview: {
+    position: 'absolute',
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.primary,
+    backgroundColor: blockColorOptions[0],
+    opacity: 0.55,
+    zIndex: 3,
   },
 });
