@@ -133,6 +133,7 @@ export function DayViewScreen() {
         selectedDay={selectedDay}
         initialBlock={editingBlock}
         prefilledStartMinutes={prefilledStartMinutes}
+        focusTitleOnOpen={!editingBlock}
         onClose={closeForm}
         onSubmit={handleSubmit}
         onDelete={editingBlock ? handleDelete : undefined}
