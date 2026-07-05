@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Modal,
   Platform,
@@ -33,6 +33,7 @@ interface TimeBlockFormModalProps {
   selectedDay: Date;
   initialBlock?: TimeBlock | null;
   prefilledStartMinutes?: number | null;
+  focusTitleOnOpen?: boolean;
   onClose: () => void;
   onSubmit: (values: TimeBlockFormValues) => Promise<void>;
   onDelete?: () => Promise<void>;
@@ -102,11 +103,13 @@ export function TimeBlockFormModal({
   selectedDay,
   initialBlock,
   prefilledStartMinutes,
+  focusTitleOnOpen = false,
   onClose,
   onSubmit,
   onDelete,
 }: TimeBlockFormModalProps) {
   const isEditing = Boolean(initialBlock);
+  const titleInputRef = useRef<TextInput>(null);
 
   const [values, setValues] = useState<TimeBlockFormValues>(() =>
     initialBlock
@@ -125,6 +128,18 @@ export function TimeBlockFormModal({
       setIosPicker(null);
     }
   }, [visible, initialBlock, prefilledStartMinutes, selectedDay]);
+
+  useEffect(() => {
+    if (!visible || !focusTitleOnOpen) {
+      return;
+    }
+
+    const focusHandle = setTimeout(() => {
+      titleInputRef.current?.focus();
+    }, 100);
+
+    return () => clearTimeout(focusHandle);
+  }, [focusTitleOnOpen, visible]);
 
   const saveAndClose = useCallback(async () => {
     const payload = {
@@ -211,10 +226,12 @@ export function TimeBlockFormModal({
             <View style={styles.headerRow}>
               <View style={[styles.colorDot, { backgroundColor: values.color }]} />
               <TextInput
+                ref={titleInputRef}
                 value={values.title}
                 onChangeText={(title) => setValues((current) => ({ ...current, title }))}
                 placeholder="Titel"
                 placeholderTextColor={colors.textSecondary}
+                selectTextOnFocus={focusTitleOnOpen}
                 style={styles.titleInput}
               />
               {isEditing && onDelete ? (

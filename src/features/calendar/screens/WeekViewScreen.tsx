@@ -49,6 +49,7 @@ export function WeekViewScreen() {
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
+  const [focusTitleOnFormOpen, setFocusTitleOnFormOpen] = useState(false);
 
   const scrollYRef = useRef(0);
   const scrollRefs = useRef<Record<number, ScrollView | null>>({});
@@ -60,10 +61,11 @@ export function WeekViewScreen() {
     });
   }, []);
 
-  const openEditForm = useCallback((block: TimeBlock) => {
+  const openEditForm = useCallback((block: TimeBlock, focusTitleOnOpen = false) => {
     setEditingBlock(block);
     setFormDay(block.startAt);
     setPrefilledStartMinutes(null);
+    setFocusTitleOnFormOpen(focusTitleOnOpen);
     setIsFormVisible(true);
   }, []);
 
@@ -81,6 +83,7 @@ export function WeekViewScreen() {
     setIsFormVisible(false);
     setEditingBlock(null);
     setPrefilledStartMinutes(null);
+    setFocusTitleOnFormOpen(false);
   };
 
   const handleSlotCreate = useCallback(
@@ -98,7 +101,7 @@ export function WeekViewScreen() {
         endAt: dateFromDayMinutes(day, endMinutes),
         color: blockColorOptions[0],
       });
-      openEditForm(block);
+      openEditForm(block, true);
     },
     [createBlock, openEditForm],
   );
@@ -111,7 +114,7 @@ export function WeekViewScreen() {
         endAt: dateFromDayMinutes(day, DEFAULT_CREATE_MINUTES + DEFAULT_CREATE_DURATION),
         color: blockColorOptions[0],
       });
-      openEditForm(block);
+      openEditForm(block, true);
     },
     [createBlock, openEditForm],
   );
@@ -218,6 +221,7 @@ export function WeekViewScreen() {
         selectedDay={formDay}
         initialBlock={editingBlock}
         prefilledStartMinutes={prefilledStartMinutes}
+        focusTitleOnOpen={focusTitleOnFormOpen}
         onClose={closeForm}
         onSubmit={handleSubmit}
         onDelete={editingBlock ? handleDelete : undefined}
