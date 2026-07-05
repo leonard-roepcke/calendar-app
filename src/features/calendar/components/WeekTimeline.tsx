@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
   NativeScrollEvent,
@@ -20,9 +20,12 @@ import {
   yToMinutes,
 } from '../../../shared/utils/layout';
 import { useWeekTimeline } from '../hooks/useWeekTimeline';
+import { MAX_HOUR_HEIGHT, MIN_HOUR_HEIGHT } from '../store/CalendarProvider';
 import { HourGrid, TimeColumn } from './HourGrid';
 import { DraggableTimeBlockLayer } from './DraggableTimeBlockCard';
 import { TimeBlockLayer } from './TimeBlockCard';
+
+const ZOOM_STEP = 2;
 
 export interface SlotCreationDraft {
   dayIndex: number;
@@ -106,6 +109,11 @@ function CreationPreview({
   );
 }
 
+function normalizeZoomHeight(hourHeight: number): number {
+  const stepped = Math.round(hourHeight / ZOOM_STEP) * ZOOM_STEP;
+  return Math.min(Math.max(stepped, MIN_HOUR_HEIGHT), MAX_HOUR_HEIGHT);
+}
+
 export function WeekTimeline({
   config,
   weekStart,
@@ -130,6 +138,8 @@ export function WeekTimeline({
   hourHeightRef.current = config.hourHeight;
   const pinchBaseRef = useRef(config.hourHeight);
   const lastZoomRef = useRef(config.hourHeight);
+  const pendingZoomRef = useRef(config.hourHeight);
+  const zoomFrameRef = useRef<number | null>(null);
 
   const handleLayout = (event: LayoutChangeEvent) => {
     setGridWidth(event.nativeEvent.layout.width);
@@ -138,20 +148,52 @@ export function WeekTimeline({
   const capturePinchBase = useCallback(() => {
     pinchBaseRef.current = hourHeightRef.current;
     lastZoomRef.current = hourHeightRef.current;
+    pendingZoomRef.current = hourHeightRef.current;
+    setScrollLocked(true);
   }, []);
+
+  const flushZoom = useCallback(() => {
+    zoomFrameRef.current = null;
+    if (!onZoom) {
+      return;
+    }
+
+    const next = pendingZoomRef.current;
+    if (next !== lastZoomRef.current) {
+      lastZoomRef.current = next;
+      onZoom(next);
+    }
+  }, [onZoom]);
+
+  const finishPinch = useCallback(() => {
+    if (zoomFrameRef.current !== null) {
+      cancelAnimationFrame(zoomFrameRef.current);
+      zoomFrameRef.current = null;
+    }
+    flushZoom();
+    setScrollLocked(false);
+  }, [flushZoom]);
 
   const applyZoom = useCallback(
     (scale: number) => {
       if (!onZoom) {
         return;
       }
-      const next = Math.round(pinchBaseRef.current * scale);
-      if (next !== lastZoomRef.current) {
-        lastZoomRef.current = next;
-        onZoom(next);
+      pendingZoomRef.current = normalizeZoomHeight(pinchBaseRef.current * scale);
+      if (zoomFrameRef.current === null) {
+        zoomFrameRef.current = requestAnimationFrame(flushZoom);
       }
     },
-    [onZoom],
+    [flushZoom, onZoom],
+  );
+
+  useEffect(
+    () => () => {
+      if (zoomFrameRef.current !== null) {
+        cancelAnimationFrame(zoomFrameRef.current);
+      }
+    },
+    [],
   );
 
   const handleScroll = useCallback(
@@ -268,8 +310,11 @@ export function WeekTimeline({
         })
         .onUpdate((event) => {
           runOnJS(applyZoom)(event.scale);
+        })
+        .onFinalize(() => {
+          runOnJS(finishPinch)();
         }),
-    [applyZoom, capturePinchBase, interactive, onZoom],
+    [applyZoom, capturePinchBase, finishPinch, interactive, onZoom],
   );
 
   const showCreationPreview =

@@ -8,7 +8,8 @@ import {
   useRef,
   type ReactNode,
 } from 'react';
-import { InMemoryTimeBlockRepository } from '../../../data/repositories/InMemoryTimeBlockRepository';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AsyncStorageTimeBlockRepository } from '../../../data/repositories/AsyncStorageTimeBlockRepository';
 import { createSampleTimeBlocks } from '../../../data/seed/sampleTimeBlocks';
 import { DEFAULT_CALENDAR_CONFIG } from '../../../domain/models/calendarConfig';
 import { TimeBlockService } from '../../../domain/services/TimeBlockService';
@@ -40,6 +41,13 @@ function isDateInLoadedRange(date: Date, selectedWeekStart: Date): boolean {
 
 export const MIN_HOUR_HEIGHT = 28;
 export const MAX_HOUR_HEIGHT = 150;
+const HOUR_HEIGHT_STEP = 2;
+const HOUR_HEIGHT_STORAGE_KEY = 'calendar-app:hour-height:v1';
+
+function normalizeHourHeight(hourHeight: number): number {
+  const stepped = Math.round(hourHeight / HOUR_HEIGHT_STEP) * HOUR_HEIGHT_STEP;
+  return Math.min(Math.max(stepped, MIN_HOUR_HEIGHT), MAX_HOUR_HEIGHT);
+}
 
 interface CalendarState {
   selectedWeekStart: Date;
@@ -113,7 +121,7 @@ interface CalendarContextValue {
 
 const CalendarContext = createContext<CalendarContextValue | null>(null);
 
-const repository = new InMemoryTimeBlockRepository(createSampleTimeBlocks());
+const repository = new AsyncStorageTimeBlockRepository(createSampleTimeBlocks());
 const timeBlockService = new TimeBlockService(repository);
 
 export function CalendarProvider({ children }: { children: ReactNode }) {
@@ -158,6 +166,35 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       hasLoadedRef.current = true;
     });
   }, [refreshWeek]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadHourHeight() {
+      try {
+        const storedHourHeight = await AsyncStorage.getItem(HOUR_HEIGHT_STORAGE_KEY);
+        if (!isMounted || storedHourHeight === null) {
+          return;
+        }
+
+        const parsed = Number(storedHourHeight);
+        if (Number.isFinite(parsed)) {
+          dispatch({
+            type: 'SET_HOUR_HEIGHT',
+            hourHeight: normalizeHourHeight(parsed),
+          });
+        }
+      } catch {
+        // The zoom preference is non-critical; keep the default if it cannot load.
+      }
+    }
+
+    void loadHourHeight();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const goToPreviousWeek = useCallback(() => {
     dispatch({
@@ -296,11 +333,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const setHourHeight = useCallback((hourHeight: number) => {
-    const clamped = Math.min(
-      Math.max(Math.round(hourHeight), MIN_HOUR_HEIGHT),
-      MAX_HOUR_HEIGHT,
-    );
+    const clamped = normalizeHourHeight(hourHeight);
     dispatch({ type: 'SET_HOUR_HEIGHT', hourHeight: clamped });
+    void AsyncStorage.setItem(HOUR_HEIGHT_STORAGE_KEY, String(clamped)).catch(
+      () => undefined,
+    );
   }, []);
 
   const config = useMemo(
