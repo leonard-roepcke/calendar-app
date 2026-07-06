@@ -15,6 +15,18 @@ export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 
 if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  for JAVA_CANDIDATE in \
+    /usr/lib/jvm/java-17-openjdk-amd64 \
+    /usr/lib/jvm/java-17-openjdk \
+    /usr/lib/jvm/java-21-openjdk-amd64; do
+    if [ -x "$JAVA_CANDIDATE/bin/java" ]; then
+      JAVA_HOME="$JAVA_CANDIDATE"
+      break
+    fi
+  done
+fi
+
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
   JAVA_BIN="$(command -v javac || command -v java || true)"
   if [ -n "$JAVA_BIN" ]; then
     JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$JAVA_BIN")")")"
