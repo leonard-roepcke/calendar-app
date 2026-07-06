@@ -13,7 +13,20 @@ log() {
 
 export ANDROID_HOME="${ANDROID_HOME:-$HOME/Android/Sdk}"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-export JAVA_HOME="${JAVA_HOME:-/usr/lib/jvm/java-17-openjdk}"
+
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  JAVA_BIN="$(command -v javac || command -v java || true)"
+  if [ -n "$JAVA_BIN" ]; then
+    JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$JAVA_BIN")")")"
+  fi
+fi
+
+if [ -z "${JAVA_HOME:-}" ] || [ ! -x "$JAVA_HOME/bin/java" ]; then
+  echo "JAVA_HOME is not set and no Java installation could be detected." >&2
+  exit 1
+fi
+
+export JAVA_HOME
 export PATH="$ANDROID_HOME/platform-tools:$ANDROID_HOME/cmdline-tools/latest/bin:$JAVA_HOME/bin:$PATH"
 export NODE_ENV=production
 
