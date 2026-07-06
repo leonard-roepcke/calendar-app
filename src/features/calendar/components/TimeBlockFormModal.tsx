@@ -89,10 +89,14 @@ function formatDuration(minutes: number): string {
 function TrashIcon() {
   return (
     <View style={styles.trashIcon}>
-      <View style={styles.trashLid} />
-      <View style={styles.trashBody}>
-        <View style={styles.trashLine} />
-        <View style={styles.trashLine} />
+      <View style={styles.trashHandle} />
+      <View style={styles.trashLid}>
+        <View style={styles.trashLidLine} />
+      </View>
+      <View style={styles.trashCan}>
+        <View style={styles.trashGroove} />
+        <View style={styles.trashGroove} />
+        <View style={styles.trashGroove} />
       </View>
     </View>
   );
@@ -237,7 +241,10 @@ export function TimeBlockFormModal({
               {isEditing && onDelete ? (
                 <Pressable
                   onPress={() => void onDelete()}
-                  style={styles.deleteButton}
+                  style={({ pressed }) => [
+                    styles.deleteButton,
+                    pressed && styles.deleteButtonPressed,
+                  ]}
                   hitSlop={8}
                   accessibilityRole="button"
                   accessibilityLabel="Termin löschen"
@@ -394,43 +401,77 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   deleteButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#FEF2F2',
+    borderWidth: 1,
+    borderColor: '#FECACA',
+    shadowColor: colors.danger,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  deleteButtonPressed: {
     backgroundColor: '#FEE2E2',
+    transform: [{ scale: 0.96 }],
   },
   trashIcon: {
-    width: 16,
-    height: 16,
+    width: 19,
+    height: 20,
     alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  trashHandle: {
+    position: 'absolute',
+    top: 1,
+    width: 7,
+    height: 3,
+    borderTopLeftRadius: 3,
+    borderTopRightRadius: 3,
+    borderWidth: 1.5,
+    borderBottomWidth: 0,
+    borderColor: colors.danger,
   },
   trashLid: {
-    width: 14,
-    height: 3,
-    borderRadius: 1,
-    backgroundColor: colors.danger,
-    marginBottom: 1,
-  },
-  trashBody: {
-    width: 11,
-    height: 10,
-    borderWidth: 1.5,
-    borderTopWidth: 0,
-    borderColor: colors.danger,
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
+    position: 'absolute',
+    top: 5,
+    width: 17,
+    height: 4,
     alignItems: 'center',
-    paddingTop: 2,
+    justifyContent: 'center',
+    transform: [{ rotate: '-3deg' }],
   },
-  trashLine: {
-    width: 1,
-    height: 5,
+  trashLidLine: {
+    width: 17,
+    height: 2,
+    borderRadius: 999,
     backgroundColor: colors.danger,
-    borderRadius: 1,
+  },
+  trashCan: {
+    width: 14,
+    height: 13,
+    borderWidth: 1.5,
+    borderColor: colors.danger,
+    borderTopWidth: 1.5,
+    borderRadius: 4,
+    borderTopLeftRadius: 2,
+    borderTopRightRadius: 2,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    gap: 2,
+    paddingBottom: 2.5,
+  },
+  trashGroove: {
+    width: 1.5,
+    height: 7,
+    backgroundColor: colors.danger,
+    borderRadius: 999,
+    opacity: 0.78,
   },
   timeRow: {
     flexDirection: 'row',

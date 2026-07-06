@@ -63,6 +63,22 @@ export function yToMinutes(
   return clampMinutes(snapped, metrics.dayStartMinutes, metrics.dayEndMinutes);
 }
 
+export function getFullHourScrollY(config: CalendarConfig, date = new Date()): number {
+  const metrics = getTimelineMetrics(config);
+  const fullHourMinutes = date.getHours() * 60;
+  const maxTopMinutes = Math.max(
+    metrics.dayStartMinutes,
+    metrics.dayEndMinutes - 60,
+  );
+  const topMinutes = clampMinutes(
+    fullHourMinutes,
+    metrics.dayStartMinutes,
+    maxTopMinutes,
+  );
+
+  return minutesToY(topMinutes, config, metrics);
+}
+
 export function layoutTimeBlocks(
   blocks: TimeBlock[],
   config: CalendarConfig,
