@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { blockColorOptions, colors } from '../../../shared/theme/colors';
 import { addDays, dateFromDayMinutes, getWeekDays } from '../../../shared/utils/dateTime';
+import { getFullHourScrollY } from '../../../shared/utils/layout';
 import {
   TimeBlockFormModal,
   type TimeBlockFormValues,
@@ -52,7 +53,13 @@ export function WeekViewScreen() {
   const [focusTitleOnFormOpen, setFocusTitleOnFormOpen] = useState(false);
 
   const scrollYRef = useRef(0);
+  const didSetInitialScrollRef = useRef(false);
   const scrollRefs = useRef<Record<number, ScrollView | null>>({});
+
+  if (!isLoading && !didSetInitialScrollRef.current) {
+    scrollYRef.current = getFullHourScrollY(config);
+    didSetInitialScrollRef.current = true;
+  }
 
   const syncScroll = useCallback((y: number) => {
     scrollYRef.current = y;

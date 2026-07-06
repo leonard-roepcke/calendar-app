@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { TimeBlock } from '../../../domain/models/timeBlock';
 import { colors } from '../../../shared/theme/colors';
 import { addDays, dateFromDayMinutes, startOfDay } from '../../../shared/utils/dateTime';
+import { getFullHourScrollY } from '../../../shared/utils/layout';
 import { DayHeader } from '../components/DayHeader';
 import { DayTimeline } from '../components/DayTimeline';
 import {
@@ -37,6 +38,11 @@ export function DayViewScreen() {
   const [prefilledStartMinutes, setPrefilledStartMinutes] = useState<number | null>(
     null,
   );
+  const initialScrollYRef = useRef<number | null>(null);
+
+  if (!isLoading && initialScrollYRef.current === null) {
+    initialScrollYRef.current = getFullHourScrollY(config);
+  }
 
   const openCreateForm = (startMinutes?: number) => {
     setEditingBlock(null);
@@ -119,6 +125,7 @@ export function DayViewScreen() {
         <DayTimeline
           config={config}
           selectedDay={selectedDay}
+          initialScrollY={initialScrollYRef.current ?? 0}
           onSlotPress={(minutes) => openCreateForm(minutes)}
           onBlockPress={openEditForm}
         />

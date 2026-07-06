@@ -140,11 +140,33 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const hasLoadedRef = useRef(false);
 
+  const loadStoredHourHeight = useCallback(async () => {
+    try {
+      const storedHourHeight = await AsyncStorage.getItem(HOUR_HEIGHT_STORAGE_KEY);
+      if (storedHourHeight === null) {
+        return;
+      }
+
+      const parsed = Number(storedHourHeight);
+      if (Number.isFinite(parsed)) {
+        dispatch({
+          type: 'SET_HOUR_HEIGHT',
+          hourHeight: normalizeHourHeight(parsed),
+        });
+      }
+    } catch {
+      // The zoom preference is non-critical; keep the default if it cannot load.
+    }
+  }, []);
+
   const refreshWeek = useCallback(async (showLoading = false) => {
     if (showLoading) {
       dispatch({ type: 'SET_LOADING', isLoading: true });
     }
     try {
+      if (showLoading) {
+        await loadStoredHourHeight();
+      }
       const { start, end } = loadedRange(state.selectedWeekStart);
       const blocks = await timeBlockService.listRange(start, end);
       dispatch({ type: 'SET_BLOCKS', blocks });
@@ -159,42 +181,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         dispatch({ type: 'SET_LOADING', isLoading: false });
       }
     }
-  }, [state.selectedWeekStart]);
+  }, [loadStoredHourHeight, state.selectedWeekStart]);
 
   useEffect(() => {
     void refreshWeek(!hasLoadedRef.current).finally(() => {
       hasLoadedRef.current = true;
     });
   }, [refreshWeek]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadHourHeight() {
-      try {
-        const storedHourHeight = await AsyncStorage.getItem(HOUR_HEIGHT_STORAGE_KEY);
-        if (!isMounted || storedHourHeight === null) {
-          return;
-        }
-
-        const parsed = Number(storedHourHeight);
-        if (Number.isFinite(parsed)) {
-          dispatch({
-            type: 'SET_HOUR_HEIGHT',
-            hourHeight: normalizeHourHeight(parsed),
-          });
-        }
-      } catch {
-        // The zoom preference is non-critical; keep the default if it cannot load.
-      }
-    }
-
-    void loadHourHeight();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const goToPreviousWeek = useCallback(() => {
     dispatch({

@@ -16,6 +16,7 @@ import { TimeBlockLayer } from './TimeBlockCard';
 interface DayTimelineProps {
   config: CalendarConfig;
   selectedDay: Date;
+  initialScrollY?: number;
   onSlotPress: (minutesFromMidnight: number) => void;
   onBlockPress: (blockId: string) => void;
 }
@@ -23,6 +24,7 @@ interface DayTimelineProps {
 export function DayTimeline({
   config,
   selectedDay,
+  initialScrollY = 0,
   onSlotPress,
   onBlockPress,
 }: DayTimelineProps) {
@@ -44,6 +46,7 @@ export function DayTimeline({
       style={styles.scroll}
       contentContainerStyle={{ paddingBottom: TIMELINE_SCROLL_BOTTOM_PADDING + 48 }}
       showsVerticalScrollIndicator={false}
+      contentOffset={{ x: 0, y: initialScrollY }}
     >
       <View style={styles.row}>
         <TimeColumn config={config} />
