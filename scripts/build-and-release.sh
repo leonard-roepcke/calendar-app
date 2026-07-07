@@ -19,6 +19,11 @@ export NODE_ENV=production
 
 log "Starting build-and-release pipeline"
 
+if [ ! -d "$ROOT_DIR/node_modules" ]; then
+  log "Installing npm dependencies"
+  npm ci
+fi
+
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   log "Staging and committing changes"
   git add -A
@@ -34,7 +39,7 @@ APK_PATH="$ROOT_DIR/releases/$APK_NAME"
 APK_SHA256_PATH="$APK_PATH.sha256"
 
 log "Preparing Android project (Expo prebuild)"
-npx expo prebuild --platform android --no-install
+npx --no-install expo prebuild --platform android --no-install
 
 log "Building APK"
 cd "$ROOT_DIR/android"
