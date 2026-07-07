@@ -26,10 +26,12 @@ if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --o
 fi
 
 VERSION="$(node -p "require('./package.json').version")"
+VERSION_CODE="$(node -p "require('./app.json').expo.android.versionCode")"
 BUILD_ID="$(date +%Y%m%d-%H%M%S)"
 TAG="v${VERSION}-${BUILD_ID}"
 APK_NAME="calendar-app-${TAG}.apk"
 APK_PATH="$ROOT_DIR/releases/$APK_NAME"
+APK_SHA256_PATH="$APK_PATH.sha256"
 
 log "Preparing Android project (Expo prebuild)"
 npx expo prebuild --platform android --no-install
@@ -49,6 +51,10 @@ fi
 cp "$BUILT_APK" "$APK_PATH"
 log "APK saved to $APK_PATH"
 
+(cd "$ROOT_DIR" && sha256sum "releases/$APK_NAME" > "$APK_SHA256_PATH")
+printf '%s\n' "$TAG" > "$ROOT_DIR/releases/latest-tag.txt"
+log "APK checksum saved to $APK_SHA256_PATH"
+
 cd "$ROOT_DIR"
 git add -A
 git commit -m "Release $TAG" || true
@@ -58,9 +64,10 @@ git push -u origin HEAD
 
 if command -v gh >/dev/null 2>&1; then
   log "Creating GitHub release $TAG"
-  gh release create "$TAG" "$APK_PATH" \
-    --title "Calendar App $TAG" \
-    --notes "Automatischer Release nach Cursor-Änderungen." \
+  gh release create "$TAG" "$APK_PATH" "$APK_SHA256_PATH" \
+    --target "$(git rev-parse HEAD)" \
+    --title "Calendar App $TAG (Android versionCode $VERSION_CODE)" \
+    --notes "Automatischer Release nach Cursor-Änderungen. Android versionCode: $VERSION_CODE." \
     || log "GitHub release creation failed (tag may already exist)"
 else
   log "gh CLI not found, skipping GitHub release"
