@@ -33,6 +33,11 @@ if [ ! -d "$ROOT_DIR/node_modules" ]; then
   npm ci
 fi
 
+RN_GRADLE_SETTINGS="$ROOT_DIR/node_modules/@react-native/gradle-plugin/settings.gradle.kts"
+if [ -f "$RN_GRADLE_SETTINGS" ]; then
+  node -e "const fs=require('fs'); const path=process.argv[1]; const before=fs.readFileSync(path,'utf8'); const after=before.replace('version(\"0.5.0\")','version(\"1.0.0\")'); if (after!==before) { fs.writeFileSync(path, after); }" "$RN_GRADLE_SETTINGS"
+fi
+
 if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
   log "Staging and committing changes"
   git add -A
