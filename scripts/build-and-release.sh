@@ -28,6 +28,14 @@ export NODE_ENV=production
 
 log "Starting build-and-release pipeline"
 
+if [ -f "$ROOT_DIR/releases/latest-tag.txt" ]; then
+  LATEST_TAG="$(tr -d '\r\n' < "$ROOT_DIR/releases/latest-tag.txt")"
+  if [ -n "$LATEST_TAG" ] && [ "$(git log -1 --format=%s)" = "Release $LATEST_TAG" ]; then
+    log "Latest release $LATEST_TAG already matches HEAD, skipping"
+    exit 0
+  fi
+fi
+
 if [ ! -d "$ROOT_DIR/node_modules" ]; then
   log "Installing npm dependencies"
   npm ci
